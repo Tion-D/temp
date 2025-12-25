@@ -95,9 +95,7 @@ local GOBLIN_CAVE_BOUNDS = {
 local State = {
     savedWalkSpeed = Constants.DEFAULT_WALKSPEED,
     savedJumpPower = Constants.DEFAULT_JUMPPOWER,
-    
-    antiAFKConnection = nil,
-    
+        
     flyEnabled = false,
     flySpeed = 50,
     flyConnection = nil,
@@ -2811,27 +2809,6 @@ do
         end
     })
     
-    Tabs.Home:AddToggle("AntiAFK", {
-        Title = "Anti AFK",
-        Description = "Prevents you from being kicked for inactivity",
-        Default = false,
-        Callback = function(enabled)
-            State.antiAFKConnection = Utils.cleanupConnection(State.antiAFKConnection)
-            
-            if enabled then
-                State.antiAFKConnection = LocalPlayer.Idled:Connect(function()
-                    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-                    task.wait(1)
-                    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-                end)
-                Utils.notify("Anti AFK", "Enabled - You won't get kicked", 3)
-            else
-                Utils.notify("Anti AFK", "Disabled", 2)
-            end
-        end
-    })
-    
-end
 
 do
     Tabs.Ingame:AddSlider("JumpPower", {
@@ -3325,7 +3302,6 @@ do
             PlayerFunctions.disableESP()
             
 
-            State.antiAFKConnection = Utils.cleanupConnection(State.antiAFKConnection)
             
             State.rareOreDetectionEnabled = false
             MiningFunctions.stopRareOreDetection()
@@ -3428,5 +3404,20 @@ Players.PlayerRemoving:Connect(function(player)
         MonsterFunctions.stopFarming()
     end
 end)
-
+local GC = getconnections or get_signal_cons
+if GC then
+    for i, v in pairs(GC(LocalPlayer.Idled)) do
+        if v["Disable"] then
+            v["Disable"](v)
+        elseif v["Disconnect"] then
+            v["Disconnect"](v)
+        end
+    end
+else
+    local VirtualUser = cloneref(game:GetService("VirtualUser"))
+    LocalPlayer.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end
 print("[Jordon Hub] ✅ Script loaded successfully!")
