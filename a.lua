@@ -126,6 +126,7 @@ local State = {
     monsterFarmEnabled = false,
     monsterBlockingEnabled = false,
     autoBlockEnabled = false,
+    autoFaceMonster = true,
     selectedMonsters = {"Zombie"},
     monsterConnection = nil,
     monsterNoclipConnection = nil,
@@ -156,19 +157,10 @@ local RareOreData = {
     ["Lightite"] = "https://static.wikitide.net/theforgewiki/thumb/1/11/Lightite.png/94px-Lightite.png",
     ["Demonite"] = "https://static.wikitide.net/theforgewiki/3/3d/Demonite.png",
     ["Darkryte"] = "https://static.wikitide.net/theforgewiki/thumb/8/83/Darkryte.png/128px-Darkryte.png",
-    ["Arcane Crystal"] = "https://static.wikitide.net/theforgewiki/thumb/9/99/ArcaneCrystal.png/128px-ArcaneCrystal.png",
-    ["Velchire"] = "https://static.wikitide.net/theforgewiki/thumb/c/cf/Velchire_Ore.png/64px-Velchire_Ore.png",
-    ["Sanctis"] = "https://static.wikitide.net/theforgewiki/thumb/2/22/Sanctis_Ore.png/64px-Sanctis_Ore.png",
-    ["Snowite"] = "https://static.wikitide.net/theforgewiki/thumb/f/f6/Snowite_Ore.png/64px-Snowite_Ore.png",
-    ["Iceite"] = "https://static.wikitide.net/theforgewiki/thumb/6/6a/Iceite.png/64px-Iceite.png",
-    ["Voidstar"] = "https://static.wikitide.net/theforgewiki/3/32/Voidstar_Ore.png",
-    ["Etherealite"] = "https://static.wikitide.net/theforgewiki/2/23/Etherealite_Ore.png",
-    ["Suryafal"] = "https://static.wikitide.net/theforgewiki/thumb/2/26/Suryafal_Ore.png/64px-Suryafal_Ore.png",
-    ["Gargantuan"] = "https://static.wikitide.net/theforgewiki/thumb/3/34/Gargantuan_Ore.png/64px-Gargantuan_Ore.png",
-    ["Heavenite"] = "https://static.wikitide.net/theforgewiki/thumb/6/62/Heavenite.png/64px-Heavenite.png"
+    ["Arcane Crystal Ore"] = "https://static.wikitide.net/theforgewiki/thumb/9/99/ArcaneCrystal.png/128px-ArcaneCrystal.png"
 }
 
-local RareOreTypes = {"Fireite", "Magmaite", "Lightite", "Demonite", "Darkryte", "Arcane Crystal", "Voidstar", "Etherealite", "Suryafal", "Heavenite", "Gargantuan", "Iceite", "Snowite", "Velchire", "Sanctis"}
+local RareOreTypes = {"Fireite", "Magmaite", "Lightite", "Demonite", "Darkryte", "Arcane Crystal Ore"}
 
 local Connections = {}
 
@@ -2034,6 +2026,21 @@ function MonsterFunctions.activateWeapon()
     MonsterState.lastAttackTime = currentTime
 end
 
+function MonsterFunctions.faceMonster(monster)
+    local hrp = Utils.getHumanoidRootPart()
+    if not hrp or not monster or not monster.Parent then return false end
+    
+    local monsterPos = MonsterFunctions.getMonsterPosition(monster)
+    if not monsterPos then return false end
+    
+    local currentPos = hrp.Position
+    local lookVector = (monsterPos - currentPos).Unit
+    local newCFrame = CFrame.new(currentPos, currentPos + Vector3.new(lookVector.X, 0, lookVector.Z))
+    
+    hrp.CFrame = newCFrame
+    return true
+end
+
 function MonsterFunctions.getDistanceToMonster(monster)
     if not monster then return math.huge end
     local hrp = Utils.getHumanoidRootPart()
@@ -2632,6 +2639,11 @@ function MonsterFunctions.startTargetingLoop()
                         end
                         MonsterState.isAtMonster = true
                         MonsterState.stuckCount = 0
+                    elseif MonsterState.isAtMonster and distToMonster > tonumber(MonsterState.arrivalDistance or 5) + 5 then
+                        -- Monster moved away while we were attacking it
+                        print(string.format("[MONSTER] ⚠️ Monster moved away! (Distance: %.2f) Re-tweening...", distToMonster))
+                        MonsterState.isAtMonster = false
+                        lastTweenTime = currentTime - RETWEEN_INTERVAL
                     end
                 end
                 
@@ -2723,6 +2735,11 @@ function MonsterFunctions.startAttackLoop()
                 if monsterPos then
                     local dist = (hrp.Position - monsterPos).Magnitude
                     if dist <= ATTACK_RANGE then
+                        -- Face the monster before attacking (if enabled)
+                        if State.autoFaceMonster then
+                            MonsterFunctions.faceMonster(MonsterState.currentTarget)
+                        end
+                        
                         MonsterFunctions.activateWeapon()
                         
                         local currentTime = tick()
@@ -2981,14 +2998,14 @@ do
         end
     })
     
-    -- Tabs.Mining:AddToggle("GoblinCaveUnlocked", {
-    --     Title = "Goblin Cave Unlocked",
-    --     Description = "Enable if you've unlocked the Goblin Cave",
-    --     Default = false,
-    --     Callback = function(value)
-    --         State.goblinCaveUnlocked = value
-    --     end
-    -- })
+    Tabs.Mining:AddToggle("GoblinCaveUnlocked", {
+        Title = "Goblin Cave Unlocked",
+        Description = "Enable if you've unlocked the Goblin Cave",
+        Default = false,
+        Callback = function(value)
+            State.goblinCaveUnlocked = value
+        end
+    })
     
     Tabs.Mining:AddToggle("AutoMining", {
         Title = "Enable Auto Mining",
@@ -3202,14 +3219,14 @@ do
         end
     })
     
-    -- Tabs.Monster:AddToggle("MonsterGoblinCave", {
-    --     Title = "Goblin Cave Unlocked",
-    --     Description = "Enable if you've unlocked the Goblin Cave",
-    --     Default = false,
-    --     Callback = function(value)
-    --         State.goblinCaveUnlocked = value
-    --     end
-    -- })
+    Tabs.Monster:AddToggle("MonsterGoblinCave", {
+        Title = "Goblin Cave Unlocked",
+        Description = "Enable if you've unlocked the Goblin Cave",
+        Default = false,
+        Callback = function(value)
+            State.goblinCaveUnlocked = value
+        end
+    })
     
     Tabs.Monster:AddToggle("AutoMonsterFarm", {
         Title = "Enable Monster Farm",
@@ -3222,6 +3239,20 @@ do
             else
                 MonsterFunctions.stopFarming()
                 Utils.notify("Monster Farm", "Stopped", 2)
+            end
+        end
+    })
+    
+    Tabs.Monster:AddToggle("AutoFaceMonster", {
+        Title = "Auto-Face Monster",
+        Description = "Automatically face monsters while attacking (prevents missing)",
+        Default = true,
+        Callback = function(enabled)
+            State.autoFaceMonster = enabled
+            if enabled then
+                Utils.notify("Auto-Face", "Enabled - Will face monsters", 2)
+            else
+                Utils.notify("Auto-Face", "Disabled", 2)
             end
         end
     })
@@ -3423,3 +3454,4 @@ else
         VirtualUser:ClickButton2(Vector2.new())
     end)
 end
+
