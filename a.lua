@@ -570,6 +570,7 @@ local MiningState = {
     lastMaintenanceHit = 0,
     shouldMineOut = false,
     recentlyCheckedRocks = {},
+    currentTweenId = nil,
     ROCK_COOLDOWN = 30,
     
     -- New stuck detection variables
@@ -1303,9 +1304,15 @@ function MiningFunctions.tweenToRock(rock, useInstantTeleport)
         -- Direct path to target
         table.insert(waypoints, targetPos)
     end
-    
+    local tweenId = tick()
+    MiningState.currentTweenId = tweenId
+
     -- Function to tween through waypoints
     local function tweenToNextWaypoint(waypointIndex)
+        if MiningState.currentTweenId ~= tweenId then
+            return
+        end
+        
         if waypointIndex > #waypoints then
             MiningState.isAtRock = true
             MiningState.tweenStartTime = 0
@@ -1329,8 +1336,8 @@ function MiningFunctions.tweenToRock(rock, useInstantTeleport)
         
         MiningState.currentTween = TweenService:Create(currentHrp, tweenInfo, {CFrame = CFrame.new(nextWaypoint)})
         
-        MiningState.currentTween.Completed:Connect(function(playbackState)
-            if playbackState == Enum.PlaybackState.Completed then
+       MiningState.currentTween.Completed:Connect(function(playbackState)
+            if playbackState == Enum.PlaybackState.Completed and MiningState.currentTweenId == tweenId then
                 print(string.format("[MINING] ✅ Reached waypoint %d/%d", waypointIndex, #waypoints))
                 -- Move to next waypoint
                 task.wait(0.1)
@@ -1926,6 +1933,7 @@ local MonsterState = {
     ATTACK_COOLDOWN = 0.1,
     lastAttackTime = 0,
     lastTweenTime = 0,
+    currentTweenId = nil,
     lastTargetPosition = nil,
     
     -- Stuck detection for monsters
@@ -2424,9 +2432,13 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         -- Direct path to target
         table.insert(waypoints, targetPos)
     end
-    
+    local tweenId = tick()
+    MonsterState.currentTweenId = tweenId
     -- Function to tween through waypoints
     local function tweenToNextWaypoint(waypointIndex)
+        if MonsterState.currentTweenId ~= tweenId then
+            return
+        end
         if waypointIndex > #waypoints then
             MonsterState.isAtMonster = true
             MonsterState.tweenStartTime = 0
@@ -2450,7 +2462,7 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         MonsterState.currentTween = TweenService:Create(currentHrp, tweenInfo, {CFrame = CFrame.new(nextWaypoint)})
         
         MonsterState.currentTween.Completed:Connect(function(playbackState)
-            if playbackState == Enum.PlaybackState.Completed then
+            if playbackState == Enum.PlaybackState.Completed and MonsterState.currentTweenId == tweenId then
                 print(string.format("[MONSTER] ✅ Reached waypoint %d/%d", waypointIndex, #waypoints))
                 -- Move to next waypoint
                 task.wait(0.1)
@@ -2810,7 +2822,7 @@ do
             end
         end
     })
-    
+end
 
 do
     Tabs.Ingame:AddSlider("JumpPower", {
