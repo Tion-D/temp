@@ -199,6 +199,18 @@ function Utils.isAtSpawnLocation()
     return false
 end
 
+function Utils.fixCameraDesync()
+    local camera = workspace.CurrentCamera
+    if camera then
+        camera.CameraType = Enum.CameraType.Custom
+        
+        local hrp = Utils.getHumanoidRootPart()
+        if hrp then
+            camera.CFrame = CFrame.new(camera.CFrame.Position, hrp.Position)
+        end
+    end
+end
+
 function Utils.getSpawnEscapeWaypoints(targetPos)
     local waypoints = {}
     
@@ -313,7 +325,6 @@ function Utils.detectDesync()
     
     return false, speed
 end
-
 function Utils.fixDesync()
     local hrp = Utils.getHumanoidRootPart()
     if not hrp then return false end
@@ -341,6 +352,12 @@ function Utils.fixDesync()
                 part.RotVelocity = Vector3.zero
             end
         end
+    end
+    
+    -- NEW: Fix camera
+    local camera = workspace.CurrentCamera
+    if camera then
+        camera.CameraType = Enum.CameraType.Custom
     end
     
     -- Force humanoid to reset state
@@ -2427,8 +2444,13 @@ function MonsterFunctions.cancelCurrentTween()
         end)
         MonsterState.currentTween = nil
     end
+    
+    local hrp = Utils.getHumanoidRootPart()
+    if hrp then
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end
 end
-
 function MonsterFunctions.checkIfStuck()
     local hrp = Utils.getHumanoidRootPart()
     if not hrp then return false end
@@ -2512,7 +2534,6 @@ function MonsterFunctions.teleportToMonster(monster)
     print("[MONSTER] ⚡ Instant teleport to monster center!")
     return true
 end
-
 function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     local hrp = Utils.getHumanoidRootPart()
     if not hrp or not monster or not monster.Parent then return false end
@@ -2529,8 +2550,25 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         return false
     end
 
+    -- NEW: Check for existing high velocity (sign of desync) BEFORE doing anything
+    local currentVelocity = hrp.AssemblyLinearVelocity.Magnitude
+    if currentVelocity > 50 then
+        print(string.format("[MONSTER] ⚠️ High velocity detected (%.2f), fixing before tween...", currentVelocity))
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        
+        -- Reset camera to prevent flashing
+        local camera = workspace.CurrentCamera
+        if camera then
+            camera.CameraType = Enum.CameraType.Custom
+        end
+        
+        task.wait(0.1) -- Small delay to let physics settle
+    end
+
     MonsterFunctions.cancelCurrentTween()
     
+    -- NEW: Double-check velocity is zero after cancel
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
     
@@ -2588,6 +2626,17 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         local currentHrp = Utils.getHumanoidRootPart()
         if not currentHrp then return end
         
+        -- NEW: Check for flinging mid-tween
+        local velocity = currentHrp.AssemblyLinearVelocity.Magnitude
+        if velocity > 100 then
+            print(string.format("[MONSTER] ⚠️ FLING DETECTED mid-tween! Velocity: %.2f, aborting...", velocity))
+            currentHrp.AssemblyLinearVelocity = Vector3.zero
+            currentHrp.AssemblyAngularVelocity = Vector3.zero
+            MonsterState.currentTweenId = nil -- Invalidate this tween
+            MonsterState.isAtMonster = false
+            return
+        end
+        
         currentHrp.AssemblyLinearVelocity = Vector3.zero
         currentHrp.AssemblyAngularVelocity = Vector3.zero
         
@@ -2609,6 +2658,13 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
             end
             
             if playbackState == Enum.PlaybackState.Completed and MonsterState.currentTweenId == tweenId then
+                -- NEW: Reset velocity after each waypoint completion
+                local hrpCheck = Utils.getHumanoidRootPart()
+                if hrpCheck then
+                    hrpCheck.AssemblyLinearVelocity = Vector3.zero
+                    hrpCheck.AssemblyAngularVelocity = Vector3.zero
+                end
+                
                 print(string.format("[MONSTER] ✅ Reached waypoint %d/%d", waypointIndex, #waypoints))
                 task.wait(0.1)
                 tweenToNextWaypoint(waypointIndex + 1)
@@ -2623,6 +2679,7 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     return true
 end
 
+
 function MonsterFunctions.startTargetingLoop()
     MonsterState.targetConnection = Utils.cleanupConnection(MonsterState.targetConnection)
     
@@ -2631,7 +2688,7 @@ function MonsterFunctions.startTargetingLoop()
     local lastMonsterPos = nil
     local lastWeaponCheck = 0
     local SEARCH_COOLDOWN = 1.0
-    local RETWEEN_INTERVAL = 0.5
+    local RETWEEN_INTERVAL = 1
     local POSITION_CHANGE_THRESHOLD = 8
     local ATTACK_RANGE = 15
     local WEAPON_CHECK_INTERVAL = 5.0
