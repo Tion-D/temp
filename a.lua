@@ -82,9 +82,11 @@ local RockData = {
     ["Light Crystal"] = { Ores = {"Blue Crystal", "Crimson Crystal", "Green Crystal", "Magenta Crystal", "Orange Crystal", "Rainbow Crystal", "Arcane Crystal"}, Health = 5005, RequiredDamage = 78, LuckBoost = 5 }
 }
 
-local RockTypes = {"Rock", "Boulder", "Pebble", "Lucky Block", "Light Crystal", "Volcanic Rock", "Basalt Core", "Basalt Rock", "Basalt Vein", "Violet Crystal", "Earth Crystal", "Cyan Crystal", "Crimson Crystal"}
-local RockLocations = {"All", "Island1CaveDeep", "Island1CaveMid", "Island1CaveStart", "Roof", "Island2CaveDanger1", "Island2CaveDanger2", "Island2CaveDanger3", "Island2CaveDanger4", "Island2CaveDangerClosed", "Island2CaveDeep", "Island2CaveLavaClosed", "Island2CaveMid", "Island2CaveStart", "Island2GoblinCave", "Island2VolcanicDepths"}
-local MonsterTypes = {"Bomber", "Skeleton Rogue", "Axe Skeleton", "Deathaxe Skeleton", "Elite Rogue Skeleton", "Elite Deathaxe Skeleton", "Zombie", "Delver Zombie", "Elite Zombie", "Brute Zombie", "Reaper", "Blight Puromancer", "Slime", "Blazing Slime"}
+local RockTypes = {"Rock", "Boulder", "Pebble", "Lucky Block", "Light Crystal", "Volcanic Rock", "Basalt Core", "Basalt Rock", "Basalt Vein", "Violet Crystal", "Earth Crystal", "Cyan Crystal", "Crimson Crystal", "Icy Pebble", "Icy Rock", "Icy Boulder", "Small Ice Crystal", "Medium Ice Crystal", "Large Ice Crystal", "Floating Crystal"}
+
+local RockLocations = {"All", "Island1CaveDeep", "Island1CaveMid", "Island1CaveStart", "Roof", "Island2CaveDanger1", "Island2CaveDanger2", "Island2CaveDanger3", "Island2CaveDanger4", "Island2CaveDangerClosed", "Island2CaveDeep", "Island2CaveLavaClosed", "Island2CaveMid", "Island2CaveStart", "Island2GoblinCave", "Island2VolcanicDepths", "Iceberg", "Island3CavePeakEnd", "Island3CavePeakLeft", "Island3CavePeakRight", "Island3CavePeakStart", "Island3RedCave", "Island3SpiderCaveMid", "Island3SpiderCaveMid0", "Island3SpiderCaveMid2", "Island3SpiderCaveStart", "Island3SpiderCaveStart0", "Island3SpiderCaveStart2"}
+
+local MonsterTypes = {"Bomber", "Skeleton Rogue", "Axe Skeleton", "Deathaxe Skeleton", "Elite Rogue Skeleton", "Elite Deathaxe Skeleton", "Zombie", "Delver Zombie", "Elite Zombie", "Brute Zombie", "Reaper", "Blight Puromancer", "Slime", "Blazing Slime", "Common Orc", "Elite Orc", "Crystal Spider", "Diamond Spider", "Prismarine Spider", "Yeti", "Crystal Golem"}
 
 local GOBLIN_CAVE_BOUNDS = {
     Min = Vector3.new(40, 15, -410),
