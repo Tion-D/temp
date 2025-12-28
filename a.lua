@@ -392,23 +392,23 @@ function Utils.getRockHealth(rock)
 end
 
 function Utils.getMonsterHealth(monster)
-    if not monster then return nil end
+    if not monster or not monster.Parent then return nil end
     
     local hrp = monster:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
+    if not hrp or not hrp.Parent then return nil end
     
     local info = hrp:FindFirstChild("infoFrame")
     if not info then
         info = hrp:FindFirstChild("InfoFrame")
     end
     
-    if not info then return nil end
+    if not info or not info.Parent then return nil end
     
     local frame = info:FindFirstChild("Frame")
-    if not frame then return nil end
+    if not frame or not frame.Parent then return nil end
     
     local hpLabel = frame:FindFirstChild("rockHP")
-    if not hpLabel then return nil end
+    if not hpLabel or not hpLabel.Parent then return nil end
     
     local hpText = hpLabel.Text
     if hpText and typeof(hpText) == "string" then
@@ -2050,22 +2050,22 @@ function MonsterFunctions.getPlayerNameFromClaim(claimValue)
 end
 
 function MonsterFunctions.isMonsterClaimedByOther(monster)
-    if not monster then return false end
+    if not monster or not monster.Parent then return false end
     local status = monster:FindFirstChild("Status")
-    if not status then return false end
+    if not status or not status.Parent then return false end
     local damageDone = status:FindFirstChild("DamageDone")
-    if not damageDone then return false end
+    if not damageDone or not damageDone.Parent then return false end
     local claimName = MonsterFunctions.getPlayerNameFromClaim(damageDone.Value)
     if not claimName or claimName == "" then return false end
     return claimName ~= LocalPlayer.Name
 end
 
 function MonsterFunctions.isMonsterClaimedByUs(monster)
-    if not monster then return false end
+    if not monster or not monster.Parent then return false end
     local status = monster:FindFirstChild("Status")
-    if not status then return false end
+    if not status or not status.Parent then return false end
     local damageDone = status:FindFirstChild("DamageDone")
-    if not damageDone then return false end
+    if not damageDone or not damageDone.Parent then return false end
     local claimName = MonsterFunctions.getPlayerNameFromClaim(damageDone.Value)
     return claimName == LocalPlayer.Name
 end
@@ -2127,8 +2127,10 @@ function MonsterFunctions.activateWeapon()
 end
 
 function MonsterFunctions.faceMonster(monster)
+    if not monster or not monster.Parent then return false end
+    
     local hrp = Utils.getHumanoidRootPart()
-    if not hrp or not monster or not monster.Parent then return false end
+    if not hrp or not hrp.Parent then return false end
     
     local monsterPos = MonsterFunctions.getMonsterPosition(monster)
     if not monsterPos then return false end
@@ -2142,28 +2144,34 @@ function MonsterFunctions.faceMonster(monster)
 end
 
 function MonsterFunctions.getDistanceToMonster(monster)
-    if not monster then return math.huge end
+    if not monster or not monster.Parent then return math.huge end
     local hrp = Utils.getHumanoidRootPart()
-    if not hrp then return math.huge end
-    local monsterPart = monster:FindFirstChild("HumanoidRootPart") or monster.PrimaryPart or monster:FindFirstChildWhichIsA("BasePart")
-    if not monsterPart then return math.huge end
+    if not hrp or not hrp.Parent then return math.huge end
+    local monsterPart = monster:FindFirstChild("HumanoidRootPart")
+    if not monsterPart or not monsterPart.Parent then
+        monsterPart = monster.PrimaryPart
+    end
+    if not monsterPart or not monsterPart.Parent then
+        monsterPart = monster:FindFirstChildWhichIsA("BasePart")
+    end
+    if not monsterPart or not monsterPart.Parent then return math.huge end
     return (hrp.Position - monsterPart.Position).Magnitude
 end
 
 function MonsterFunctions.getMonsterPosition(monster)
-    if not monster then return nil end
+    if not monster or not monster.Parent then return nil end
     
     local hrp = monster:FindFirstChild("HumanoidRootPart")
-    if hrp and hrp:IsA("BasePart") then
+    if hrp and hrp:IsA("BasePart") and hrp.Parent then
         return hrp.Position
     end
     
-    if monster.PrimaryPart and monster.PrimaryPart:IsA("BasePart") then
+    if monster.PrimaryPart and monster.PrimaryPart:IsA("BasePart") and monster.PrimaryPart.Parent then
         return monster.PrimaryPart.Position
     end
     
     local part = monster:FindFirstChildWhichIsA("BasePart")
-    if part then
+    if part and part.Parent then
         return part.Position
     end
     
@@ -2171,11 +2179,11 @@ function MonsterFunctions.getMonsterPosition(monster)
 end
 
 function MonsterFunctions.isMonsterAttacking(monster)
-    if not monster then return false end
+    if not monster or not monster.Parent then return false end
     local status = monster:FindFirstChild("Status")
-    if not status then return false end
+    if not status or not status.Parent then return false end
     local attacking = status:FindFirstChild("Attacking")
-    if not attacking then return false end
+    if not attacking or not attacking.Parent then return false end
     
     local value = attacking.Value
     local isAttacking = false
@@ -2240,15 +2248,19 @@ function MonsterFunctions.findNextMonster(excludeMonster)
             for _, entity in pairs(living:GetChildren()) do
                 if entity.Name:find("^" .. monsterType) and entity ~= excludeMonster then
                     if not MonsterFunctions.isMonsterClaimedByOther(entity) and not MonsterFunctions.isMonsterProblematic(entity) then
-                        local hp = Utils.getMonsterHealth(entity)
-                        if hp and hp <= 0 then
-                            skippedDeadMonsters = skippedDeadMonsters + 1
-                        elseif not hp or hp > 0 then
-                            local pos = MonsterFunctions.getMonsterPosition(entity)
-                            if pos then
+                        -- Validate monster has a position before adding to candidates
+                        local pos = MonsterFunctions.getMonsterPosition(entity)
+                        if pos then
+                            local hp = Utils.getMonsterHealth(entity)
+                            if hp and hp <= 0 then
+                                skippedDeadMonsters = skippedDeadMonsters + 1
+                            elseif not hp or hp > 0 then
                                 local dist = (pos - myPos).Magnitude
                                 table.insert(candidates, {monster = entity, distance = dist})
                             end
+                        else
+                            -- Skip monsters without valid position (no HumanoidRootPart)
+                            print(string.format("[MONSTER] ⚠️ Skipping %s - no valid position/HRP", entity.Name))
                         end
                     end
                 end
@@ -2482,10 +2494,13 @@ end
 
 function MonsterFunctions.teleportToMonster(monster)
     local hrp = Utils.getHumanoidRootPart()
-    if not hrp or not monster or not monster.Parent then return false end
+    if not hrp or not hrp.Parent or not monster or not monster.Parent then return false end
     
     local monsterPos = MonsterFunctions.getMonsterPosition(monster)
-    if not monsterPos then return false end
+    if not monsterPos then
+        print(string.format("[MONSTER] ⚠️ Cannot teleport to %s - no valid position/HRP", monster.Name))
+        return false
+    end
     
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
@@ -2506,6 +2521,13 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         print("[MONSTER] ⚠️ Monster farm disabled, aborting tween")
         return false
     end
+    
+    -- Validate monster has a position before tweening
+    local monsterPos = MonsterFunctions.getMonsterPosition(monster)
+    if not monsterPos then
+        print(string.format("[MONSTER] ⚠️ Cannot tween to %s - no valid position/HRP", monster.Name))
+        return false
+    end
 
     MonsterFunctions.cancelCurrentTween()
     
@@ -2517,9 +2539,6 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     MonsterState.lastPositionTime = tick()
     MonsterState.tweenStartTime = tick()
 
-    local monsterPos = MonsterFunctions.getMonsterPosition(monster)
-    if not monsterPos then return false end
-    
     local targetPos = monsterPos
     local currentPos = hrp.Position
     local distance = (targetPos - currentPos).Magnitude
@@ -2699,6 +2718,17 @@ function MonsterFunctions.startTargetingLoop()
             
             if target and target.Parent then
                 local monsterPos = MonsterFunctions.getMonsterPosition(target)
+                
+                -- If monster has no valid position, find a new one
+                if not monsterPos then
+                    print(string.format("[MONSTER] ⚠️ Target %s has no valid position/HRP, finding new target...", target.Name))
+                    MonsterState.currentTarget = nil
+                    MonsterState.isAtMonster = false
+                    MonsterState.stuckCount = 0
+                    lastMonsterPos = nil
+                    lastSearchTime = 0
+                    return
+                end
                 
                 local health = Utils.getMonsterHealth(target)
                 
@@ -3111,14 +3141,14 @@ do
         end
     })
     
-    Tabs.Mining:AddToggle("GoblinCaveUnlocked", {
-        Title = "Goblin Cave Unlocked",
-        Description = "Enable if you've unlocked the Goblin Cave",
-        Default = false,
-        Callback = function(value)
-            State.goblinCaveUnlocked = value
-        end
-    })
+    -- Tabs.Mining:AddToggle("GoblinCaveUnlocked", {
+    --     Title = "Goblin Cave Unlocked",
+    --     Description = "Enable if you've unlocked the Goblin Cave",
+    --     Default = false,
+    --     Callback = function(value)
+    --         State.goblinCaveUnlocked = value
+    --     end
+    -- })
     
     Tabs.Mining:AddToggle("AutoMining", {
         Title = "Enable Auto Mining",
@@ -3332,14 +3362,14 @@ do
         end
     })
     
-    Tabs.Monster:AddToggle("MonsterGoblinCave", {
-        Title = "Goblin Cave Unlocked",
-        Description = "Enable if you've unlocked the Goblin Cave",
-        Default = false,
-        Callback = function(value)
-            State.goblinCaveUnlocked = value
-        end
-    })
+    -- Tabs.Monster:AddToggle("MonsterGoblinCave", {
+    --     Title = "Goblin Cave Unlocked",
+    --     Description = "Enable if you've unlocked the Goblin Cave",
+    --     Default = false,
+    --     Callback = function(value)
+    --         State.goblinCaveUnlocked = value
+    --     end
+    -- })
     
     Tabs.Monster:AddToggle("AutoMonsterFarm", {
         Title = "Enable Monster Farm",
