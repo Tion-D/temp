@@ -2435,7 +2435,6 @@ function MonsterFunctions.enableNoclip()
         end
     end)
 end
-
 function MonsterFunctions.cancelCurrentTween()
     if MonsterState.currentTween then
         MonsterState.currentTweenId = nil
@@ -2445,12 +2444,16 @@ function MonsterFunctions.cancelCurrentTween()
         MonsterState.currentTween = nil
     end
     
-    local hrp = Utils.getHumanoidRootPart()
-    if hrp then
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-    end
+    -- Wrap in pcall to prevent errors if hrp is nil
+    pcall(function()
+        local hrp = Utils.getHumanoidRootPart()
+        if hrp then
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
 end
+
 function MonsterFunctions.checkIfStuck()
     local hrp = Utils.getHumanoidRootPart()
     if not hrp then return false end
@@ -2534,6 +2537,7 @@ function MonsterFunctions.teleportToMonster(monster)
     print("[MONSTER] ⚡ Instant teleport to monster center!")
     return true
 end
+
 function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     local hrp = Utils.getHumanoidRootPart()
     if not hrp or not monster or not monster.Parent then return false end
@@ -2543,32 +2547,40 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         return false
     end
     
-    -- Validate monster has a position before tweening
     local monsterPos = MonsterFunctions.getMonsterPosition(monster)
     if not monsterPos then
         print(string.format("[MONSTER] ⚠️ Cannot tween to %s - no valid position/HRP", monster.Name))
         return false
     end
 
-    -- NEW: Check for existing high velocity (sign of desync) BEFORE doing anything
+    -- Check for existing high velocity (sign of desync) BEFORE doing anything
     local currentVelocity = hrp.AssemblyLinearVelocity.Magnitude
     if currentVelocity > 50 then
         print(string.format("[MONSTER] ⚠️ High velocity detected (%.2f), fixing before tween...", currentVelocity))
         hrp.AssemblyLinearVelocity = Vector3.zero
         hrp.AssemblyAngularVelocity = Vector3.zero
         
-        -- Reset camera to prevent flashing
         local camera = workspace.CurrentCamera
         if camera then
             camera.CameraType = Enum.CameraType.Custom
         end
         
-        task.wait(0.1) -- Small delay to let physics settle
+        task.wait(0.1)
+        
+        -- RE-GET hrp after wait since character may have changed
+        hrp = Utils.getHumanoidRootPart()
+        if not hrp then 
+            print("[MONSTER] ⚠️ Character lost after desync fix, aborting tween")
+            return false 
+        end
     end
 
     MonsterFunctions.cancelCurrentTween()
     
-    -- NEW: Double-check velocity is zero after cancel
+    -- Re-check hrp is still valid after cancel
+    hrp = Utils.getHumanoidRootPart()
+    if not hrp then return false end
+    
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
     
