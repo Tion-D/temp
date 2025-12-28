@@ -1925,7 +1925,6 @@ local MonsterState = {
     lastAttackTime = 0,
     lastTweenTime = 0,
     lastTargetPosition = nil,
-    layupOffset = 5,
     
     lastPosition = nil,
     lastPositionTime = 0,
@@ -2375,12 +2374,11 @@ function MonsterFunctions.teleportToMonster(monster)
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
     
-    -- Teleport UNDERGROUND below monster
-    local targetPos = Vector3.new(monsterPos.X, monsterPos.Y - MonsterState.layupOffset, monsterPos.Z)
+    local targetPos = monsterPos
     hrp.CFrame = CFrame.new(targetPos)
     
     MonsterState.isAtMonster = true
-    print(string.format("[MONSTER] ⚡ Instant teleport UNDERGROUND (%.1f studs below monster)!", MonsterState.layupOffset))
+    print("[MONSTER] ⚡ Instant teleport to monster center!")
     return true
 end
 
@@ -2406,9 +2404,7 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     local monsterPos = MonsterFunctions.getMonsterPosition(monster)
     if not monsterPos then return false end
     
-    -- Target position is BELOW the monster (underground)
-    local undergroundY = monsterPos.Y - MonsterState.layupOffset
-    local targetPos = Vector3.new(monsterPos.X, undergroundY, monsterPos.Z)
+    local targetPos = monsterPos
     local currentPos = hrp.Position
     local distance = (targetPos - currentPos).Magnitude
     
@@ -2420,12 +2416,7 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     end
     
     if useInstantTeleport or distance < 20 then
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.CFrame = CFrame.new(targetPos)
-        MonsterState.isAtMonster = true
-        print(string.format("[MONSTER] ⚡ Instant teleport UNDERGROUND (%.1f studs below)!", MonsterState.layupOffset))
-        return true
+        return MonsterFunctions.teleportToMonster(monster)
     end
     
     local isAtSpawn = Utils.isAtSpawnLocation()
@@ -2433,21 +2424,11 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     
     if isAtSpawn then
         print("[MONSTER] 🚀 At spawn location, using escape waypoints!")
-        local escapeWaypoints = Utils.getSpawnEscapeWaypoints(Vector3.new(monsterPos.X, monsterPos.Y, monsterPos.Z))
-        -- Lower all escape waypoints to underground level
-        for _, waypoint in ipairs(escapeWaypoints) do
-            table.insert(waypoints, Vector3.new(waypoint.X, undergroundY, waypoint.Z))
-        end
+        waypoints = Utils.getSpawnEscapeWaypoints(targetPos)
+        table.insert(waypoints, targetPos)
     else
-        -- Go underground first, then tween horizontally
-        local undergroundStart = Vector3.new(currentPos.X, undergroundY, currentPos.Z)
-        table.insert(waypoints, undergroundStart)
+        table.insert(waypoints, targetPos)
     end
-    
-    -- Final waypoint is UNDER the monster
-    table.insert(waypoints, targetPos)
-    
-    print(string.format("[MONSTER] 🌍 Tweening UNDERGROUND (%.1f studs below, horizontal approach)", MonsterState.layupOffset))
     
     local tweenId = tick()
     MonsterState.currentTweenId = tweenId
@@ -3173,7 +3154,7 @@ end
 do
     Tabs.Monster:AddParagraph({
         Title = "Monster Farm",
-        Content = "Automatically farm monsters from UNDERGROUND! Tweens horizontally while staying below ground to attack from beneath."
+        Content = "Automatically farm monsters with tween movement and optional auto-blocking. Now tweens to CENTER of monsters!"
     })
     
     State.selectedMonsters = {"Zombie"}
@@ -3197,18 +3178,6 @@ do
                 State.selectedMonsters = {"Zombie"}
                 Utils.notify("Monster Farm", "At least one monster type required, defaulting to Zombie", 3)
             end
-        end
-    })
-    
-    Tabs.Monster:AddSlider("LayupOffset", {
-        Title = "Underground Depth",
-        Description = "How far below monster to stay (studs below ground)",
-        Default = 5,
-        Min = 2,
-        Max = 15,
-        Rounding = 1,
-        Callback = function(value)
-            MonsterState.layupOffset = tonumber(value) or 5
         end
     })
     
