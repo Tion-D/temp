@@ -121,7 +121,6 @@ local State = {
     currentTargetOre = nil,
     currentPickaxePower = 4,
     currentPickaxeName = "Unknown",
-    miningVerticalOffset = 3,
     miningTweenSpeed = 80,
     
     monsterFarmEnabled = false,
@@ -134,7 +133,6 @@ local State = {
     currentTargetMonster = nil,
     isBlocking = false,
     waitingForRespawn = false,
-    monsterVerticalOffset = 2,
     
     goblinCaveExists = false,
     goblinCaveUnlocked = false,
@@ -558,6 +556,7 @@ local MiningState = {
     noclipConnection = nil,
     currentTarget = nil,
     currentTween = nil,
+    currentTweenId = nil,
     rockTypeIndex = 1,
     rockNotFoundCount = 0,
     MAX_NOT_FOUND = 10,
@@ -570,21 +569,19 @@ local MiningState = {
     lastMaintenanceHit = 0,
     shouldMineOut = false,
     recentlyCheckedRocks = {},
-    currentTweenId = nil,
     ROCK_COOLDOWN = 30,
     
-    -- New stuck detection variables
     lastPosition = nil,
     lastPositionTime = 0,
     stuckCheckInterval = 0.5,
-    stuckThreshold = 2, -- If moved less than 2 studs in stuckTimeout seconds, consider stuck
-    stuckTimeout = 3, -- Seconds without significant movement to be considered stuck
+    stuckThreshold = 2,
+    stuckTimeout = 3,
     stuckCount = 0,
     maxStuckRetries = 3,
     tweenStartTime = 0,
-    tweenTimeout = 15, -- Max seconds for a single tween
-    arrivalDistance = 5, -- Distance to consider "arrived" at rock
-    problematicRocks = {}, -- Rocks that caused getting stuck
+    tweenTimeout = 15,
+    arrivalDistance = 5,
+    problematicRocks = {},
     PROBLEMATIC_ROCK_COOLDOWN = 120,
     lastRockHealth = nil,
     lastHealthCheckTime = 0,
@@ -725,14 +722,12 @@ function MiningFunctions.findRock(rockType, location, excludeRock)
         
         local currentTime = tick()
         
-        -- Clean up old cooldowns
         for rock, timestamp in pairs(MiningState.recentlyCheckedRocks) do
             if currentTime - timestamp > MiningState.ROCK_COOLDOWN then
                 MiningState.recentlyCheckedRocks[rock] = nil
             end
         end
         
-        -- Clean up old problematic rocks
         for rock, timestamp in pairs(MiningState.problematicRocks) do
             if currentTime - timestamp > MiningState.PROBLEMATIC_ROCK_COOLDOWN then
                 MiningState.problematicRocks[rock] = nil
@@ -1044,6 +1039,7 @@ end
 
 function MiningFunctions.cancelCurrentTween()
     if MiningState.currentTween then
+        MiningState.currentTweenId = nil
         pcall(function() 
             MiningState.currentTween:Cancel() 
         end)
@@ -1078,7 +1074,6 @@ function MiningFunctions.checkIfStuck()
             local distanceMoved = (currentPos - MiningState.lastPosition).Magnitude
             local expectedMovement = MiningState.stuckThreshold
             
-            -- If we haven't moved much and we're not at the rock yet
             if distanceMoved < expectedMovement and not MiningState.isAtRock then
                 MiningState.stuckCount = MiningState.stuckCount + 1
                 
@@ -1089,7 +1084,6 @@ function MiningFunctions.checkIfStuck()
                     return true
                 end
             else
-                -- Reset stuck counter if we're moving
                 MiningState.stuckCount = 0
             end
             
@@ -1118,15 +1112,12 @@ end
 function MiningFunctions.handleStuckRecovery(rock)
     print("[MINING] 🔄 Attempting stuck recovery...")
     
-    -- Cancel any current tween
     MiningFunctions.cancelCurrentTween()
     
-    -- Mark this rock as problematic
     if rock then
         MiningFunctions.markRockAsProblematic(rock)
     end
     
-    -- Reset stuck detection state
     MiningState.stuckCount = 0
     MiningState.lastPosition = nil
     MiningState.lastPositionTime = 0
@@ -1134,18 +1125,16 @@ function MiningFunctions.handleStuckRecovery(rock)
     MiningState.isAtRock = false
     MiningState.isMining = false
     
-    -- Try to teleport up and away first
     local hrp = Utils.getHumanoidRootPart()
     if hrp then
         local currentPos = hrp.Position
-        local escapePos = currentPos + Vector3.new(0, 15, 0) -- Move up 15 studs
+        local escapePos = currentPos + Vector3.new(0, 15, 0)
         
         print("[MINING] 🚀 Teleporting up to escape stuck position...")
         hrp.CFrame = CFrame.new(escapePos)
         task.wait(0.3)
     end
     
-    -- Find a new rock (excluding the problematic one)
     local newRock = MiningFunctions.findNextRock(rock)
     
     if newRock then
@@ -1176,14 +1165,13 @@ function MiningFunctions.teleportToRock(rock)
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
 
-    local targetPos = rock.Position + Vector3.new(0, State.miningVerticalOffset, 0)
-    hrp.CFrame = CFrame.new(targetPos, rock.Position)
+    local targetPos = rock.Position
+    hrp.CFrame = CFrame.new(targetPos)
 
     MiningState.isAtRock = true
-    print("[MINING] ⚡ Instant teleport to rock!")
+    print("[MINING] ⚡ Instant teleport to rock center!")
     return true
 end
-
 
 function MiningFunctions.repositionAtRock(rock)
     if not rock or not rock.Parent then return false end
@@ -1191,33 +1179,29 @@ function MiningFunctions.repositionAtRock(rock)
     local hrp = Utils.getHumanoidRootPart()
     if not hrp then return false end
     
-    print("[MINING] 🔄 Repositioning and rotating to face rock...")
+    print("[MINING] 🔄 Repositioning to rock center...")
     
-    -- Teleport to rock position
-    local targetPos = rock.Position + Vector3.new(0, State.miningVerticalOffset, 0)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    
+    local targetPos = rock.Position
     hrp.CFrame = CFrame.new(targetPos)
     
     task.wait(0.1)
-    
-    -- Rotate character to face the rock
-    local lookAtPos = rock.Position
-    local direction = (lookAtPos - hrp.Position).Unit
-    hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + direction)
     
     MiningState.isAtRock = true
     MiningState.lastRockHealth = nil
     MiningState.noProgressCount = 0
     
-    print("[MINING] ✅ Repositioned and facing rock!")
+    print("[MINING] ✅ Repositioned at rock center!")
     return true
 end
 
 function MiningFunctions.checkMiningProgress(rock)
     local currentTime = tick()
     
-    -- Only check every HEALTH_CHECK_INTERVAL seconds
     if currentTime - MiningState.lastHealthCheckTime < MiningState.HEALTH_CHECK_INTERVAL then
-        return true -- Not time to check yet
+        return true
     end
     
     MiningState.lastHealthCheckTime = currentTime
@@ -1225,27 +1209,23 @@ function MiningFunctions.checkMiningProgress(rock)
     local currentHealth = Utils.getRockHealth(rock)
     if not currentHealth then
         print("[MINING] ⚠️ Cannot read rock health")
-        return true -- Can't determine, assume it's ok
+        return true
     end
     
-    -- First health check, just store it
     if not MiningState.lastRockHealth then
         MiningState.lastRockHealth = currentHealth
         print(string.format("[MINING] 📊 Initial health check: %.1f HP", currentHealth))
         return true
     end
     
-    -- Check if health decreased
     local healthLost = MiningState.lastRockHealth - currentHealth
     
     if healthLost > 0 then
-        -- Making progress!
         print(string.format("[MINING] ✅ Making progress! Lost %.1f HP in %d seconds", healthLost, MiningState.HEALTH_CHECK_INTERVAL))
         MiningState.lastRockHealth = currentHealth
         MiningState.noProgressCount = 0
         return true
     else
-        -- No progress made
         MiningState.noProgressCount = MiningState.noProgressCount + 1
         print(string.format("[MINING] ⚠️ No mining progress! Check %d/%d", MiningState.noProgressCount, MiningState.MAX_NO_PROGRESS))
         
@@ -1253,7 +1233,7 @@ function MiningFunctions.checkMiningProgress(rock)
             print("[MINING] ❌ Not making progress, need to reposition!")
             MiningState.lastRockHealth = currentHealth
             MiningState.noProgressCount = 0
-            return false -- Need to reposition
+            return false
         end
         
         MiningState.lastRockHealth = currentHealth
@@ -1264,21 +1244,26 @@ end
 function MiningFunctions.tweenToRock(rock, useInstantTeleport)
     local hrp = Utils.getHumanoidRootPart()
     if not hrp or not rock or not rock.Parent then return false end
+    
+    if not State.miningEnabled and not State.rareOreDetectionEnabled then
+        print("[MINING] ⚠️ Mining disabled, aborting tween")
+        return false
+    end
 
-    -- Cancel any existing tween
     MiningFunctions.cancelCurrentTween()
     
-    -- Reset stuck detection for new tween
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    
     MiningState.stuckCount = 0
     MiningState.lastPosition = hrp.Position
     MiningState.lastPositionTime = tick()
     MiningState.tweenStartTime = tick()
 
-    local targetPos = rock.Position + Vector3.new(0, State.miningVerticalOffset, 0)
+    local targetPos = rock.Position
     local currentPos = hrp.Position
     local distance = (targetPos - currentPos).Magnitude
     
-    -- If very close, just teleport instantly
     if distance <= MiningState.arrivalDistance then
         hrp.CFrame = CFrame.new(targetPos)
         MiningState.isAtRock = true
@@ -1286,29 +1271,30 @@ function MiningFunctions.tweenToRock(rock, useInstantTeleport)
         return true
     end
     
-    -- Use instant teleport if requested or if distance is short
     if useInstantTeleport or distance < 20 then
         return MiningFunctions.teleportToRock(rock)
     end
     
-    -- NEW: Check if at spawn and create waypoint path
     local isAtSpawn = Utils.isAtSpawnLocation()
     local waypoints = {}
     
     if isAtSpawn then
         print("[MINING] 🚀 At spawn location, using escape waypoints!")
         waypoints = Utils.getSpawnEscapeWaypoints(targetPos)
-        -- Add final target position
         table.insert(waypoints, targetPos)
     else
-        -- Direct path to target
         table.insert(waypoints, targetPos)
     end
+    
     local tweenId = tick()
     MiningState.currentTweenId = tweenId
 
-    -- Function to tween through waypoints
     local function tweenToNextWaypoint(waypointIndex)
+        if not State.miningEnabled and not State.rareOreDetectionEnabled then
+            print("[MINING] ⚠️ Mining disabled during tween, stopping")
+            return
+        end
+        
         if MiningState.currentTweenId ~= tweenId then
             return
         end
@@ -1323,6 +1309,9 @@ function MiningFunctions.tweenToRock(rock, useInstantTeleport)
         local currentHrp = Utils.getHumanoidRootPart()
         if not currentHrp then return end
         
+        currentHrp.AssemblyLinearVelocity = Vector3.zero
+        currentHrp.AssemblyAngularVelocity = Vector3.zero
+        
         local nextWaypoint = waypoints[waypointIndex]
         local dist = (nextWaypoint - currentHrp.Position).Magnitude
         local speed = State.miningTweenSpeed or 80
@@ -1336,10 +1325,13 @@ function MiningFunctions.tweenToRock(rock, useInstantTeleport)
         
         MiningState.currentTween = TweenService:Create(currentHrp, tweenInfo, {CFrame = CFrame.new(nextWaypoint)})
         
-       MiningState.currentTween.Completed:Connect(function(playbackState)
+        MiningState.currentTween.Completed:Connect(function(playbackState)
+            if not State.miningEnabled and not State.rareOreDetectionEnabled then
+                return
+            end
+            
             if playbackState == Enum.PlaybackState.Completed and MiningState.currentTweenId == tweenId then
                 print(string.format("[MINING] ✅ Reached waypoint %d/%d", waypointIndex, #waypoints))
-                -- Move to next waypoint
                 task.wait(0.1)
                 tweenToNextWaypoint(waypointIndex + 1)
             end
@@ -1348,7 +1340,6 @@ function MiningFunctions.tweenToRock(rock, useInstantTeleport)
         MiningState.currentTween:Play()
     end
     
-    -- Start tweening through waypoints
     tweenToNextWaypoint(1)
     
     return true
@@ -1436,6 +1427,7 @@ function MiningFunctions.startRareOreDetection()
                         MiningState.isMining = true
                     end
                 end
+                
                 if not MiningState.isAtRock and currentTime - lastTweenTime >= RETWEEN_INTERVAL then
                     lastTweenTime = currentTime
                     MiningFunctions.tweenToRock(target, false)
@@ -1457,7 +1449,7 @@ function MiningFunctions.startRareOreDetection()
                     return
                 end
                 
-               if MiningState.shouldMineOut then
+                if MiningState.shouldMineOut then
                     if MiningState.isAtRock then
                         local makingProgress = MiningFunctions.checkMiningProgress(target)
                         if not makingProgress then
@@ -1656,7 +1648,6 @@ function MiningFunctions.startTargetingLoop()
             local target = MiningState.currentTarget
             local currentTime = tick()
             
-            -- Stuck detection check
             if currentTime - lastStuckCheck >= STUCK_CHECK_INTERVAL then
                 lastStuckCheck = currentTime
                 
@@ -1675,7 +1666,7 @@ function MiningFunctions.startTargetingLoop()
                             
                             lastTweenTime = currentTime
                             lastSearchTime = currentTime
-                            MiningFunctions.tweenToRock(newRock, true) -- Use instant teleport after recovery
+                            MiningFunctions.tweenToRock(newRock, true)
                             
                             MiningState.rockTypeIndex = MiningState.rockTypeIndex + 1
                             if MiningState.rockTypeIndex > #State.selectedRockTypes then
@@ -1738,7 +1729,6 @@ function MiningFunctions.startTargetingLoop()
                     return
                 end
                 
-                -- Distance-based arrival check
                 local currentDistance = MiningFunctions.getDistanceToRock(target)
                 if currentDistance <= MiningState.arrivalDistance then
                     if not MiningState.isAtRock then
@@ -1751,12 +1741,11 @@ function MiningFunctions.startTargetingLoop()
                 if MiningState.isAtRock then
                     if not MiningState.isMining then
                         MiningState.isMining = true
-                        MiningState.lastRockHealth = nil -- Reset health tracking
+                        MiningState.lastRockHealth = nil
                         MiningState.lastHealthCheckTime = currentTime
                         print("[MINING] ⛏️ Started mining rock!")
                     end
                     
-                    -- NEW: Check if we're actually making progress
                     local makingProgress = MiningFunctions.checkMiningProgress(target)
                     if not makingProgress then
                         print("[MINING] 🔧 Not hitting rock properly, repositioning...")
@@ -1766,14 +1755,13 @@ function MiningFunctions.startTargetingLoop()
                     
                     MiningFunctions.mineRock(target)
                 end
-                -- Retween if not at rock
+                
                 if not MiningState.isAtRock and currentTime - lastTweenTime >= RETWEEN_INTERVAL then
                     lastTweenTime = currentTime
                     print("[MINING] 🔄 Re-tweening to rock...")
                     MiningFunctions.tweenToRock(target, false)
                 end
                 
-                -- Update rock cam
                 pcall(function()
                     MiningFunctions.updateRockCam(target)
                 end)
@@ -1892,6 +1880,8 @@ function MiningFunctions.stopMining()
     if State.rockCamEnabled then
         MiningFunctions.disableRockCam()
     end
+    
+    print("[MINING] 🛑 Mining fully stopped and cleaned up")
 end
 
 function MiningFunctions.enableRockCam()
@@ -1928,15 +1918,15 @@ local MonsterState = {
     blockConnection = nil,
     currentTarget = nil,
     currentTween = nil,
+    currentTweenId = nil,
     isAtMonster = false,
     previousAttackStates = {},
     ATTACK_COOLDOWN = 0.1,
     lastAttackTime = 0,
     lastTweenTime = 0,
-    currentTweenId = nil,
     lastTargetPosition = nil,
+    layupOffset = 5,
     
-    -- Stuck detection for monsters
     lastPosition = nil,
     lastPositionTime = 0,
     stuckCount = 0,
@@ -2011,7 +2001,6 @@ function MonsterFunctions.equipWeapon()
     
     return false
 end
-
 
 function MonsterFunctions.activateWeapon()
     if State.isBlocking then return end
@@ -2126,7 +2115,6 @@ function MonsterFunctions.findNextMonster(excludeMonster)
         local skippedDeadMonsters = 0
         local currentTime = tick()
         
-        -- Clean up old problematic monsters
         for monster, timestamp in pairs(MonsterState.problematicMonsters) do
             if currentTime - timestamp > MonsterState.PROBLEMATIC_MONSTER_COOLDOWN then
                 MonsterState.problematicMonsters[monster] = nil
@@ -2289,7 +2277,6 @@ function MonsterFunctions.disableAutoBlock()
     print("[AUTO BLOCK] 🚫 Auto-block system disabled")
 end
 
-
 function MonsterFunctions.enableNoclip()
     MonsterState.noclipConnection = Utils.cleanupConnection(MonsterState.noclipConnection)
     MonsterState.noclipConnection = RunService.Stepped:Connect(function()
@@ -2307,6 +2294,7 @@ end
 
 function MonsterFunctions.cancelCurrentTween()
     if MonsterState.currentTween then
+        MonsterState.currentTweenId = nil
         pcall(function()
             MonsterState.currentTween:Cancel()
         end)
@@ -2384,17 +2372,31 @@ function MonsterFunctions.teleportToMonster(monster)
     local monsterPos = MonsterFunctions.getMonsterPosition(monster)
     if not monsterPos then return false end
     
-    local targetPos = monsterPos + Vector3.new(0, State.monsterVerticalOffset, 0)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    
+    -- Teleport UNDERGROUND below monster
+    local targetPos = Vector3.new(monsterPos.X, monsterPos.Y - MonsterState.layupOffset, monsterPos.Z)
     hrp.CFrame = CFrame.new(targetPos)
     
     MonsterState.isAtMonster = true
+    print(string.format("[MONSTER] ⚡ Instant teleport UNDERGROUND (%.1f studs below monster)!", MonsterState.layupOffset))
     return true
 end
+
 function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     local hrp = Utils.getHumanoidRootPart()
     if not hrp or not monster or not monster.Parent then return false end
+    
+    if not State.monsterFarmEnabled then
+        print("[MONSTER] ⚠️ Monster farm disabled, aborting tween")
+        return false
+    end
 
     MonsterFunctions.cancelCurrentTween()
+    
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
     
     MonsterState.stuckCount = 0
     MonsterState.lastPosition = hrp.Position
@@ -2404,7 +2406,9 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     local monsterPos = MonsterFunctions.getMonsterPosition(monster)
     if not monsterPos then return false end
     
-    local targetPos = monsterPos + Vector3.new(0, State.monsterVerticalOffset, 0)
+    -- Target position is BELOW the monster (underground)
+    local undergroundY = monsterPos.Y - MonsterState.layupOffset
+    local targetPos = Vector3.new(monsterPos.X, undergroundY, monsterPos.Z)
     local currentPos = hrp.Position
     local distance = (targetPos - currentPos).Magnitude
     
@@ -2416,29 +2420,48 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     end
     
     if useInstantTeleport or distance < 20 then
-        return MonsterFunctions.teleportToMonster(monster)
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        hrp.CFrame = CFrame.new(targetPos)
+        MonsterState.isAtMonster = true
+        print(string.format("[MONSTER] ⚡ Instant teleport UNDERGROUND (%.1f studs below)!", MonsterState.layupOffset))
+        return true
     end
     
-    -- NEW: Check if at spawn and create waypoint path
     local isAtSpawn = Utils.isAtSpawnLocation()
     local waypoints = {}
     
     if isAtSpawn then
         print("[MONSTER] 🚀 At spawn location, using escape waypoints!")
-        waypoints = Utils.getSpawnEscapeWaypoints(targetPos)
-        -- Add final target position
-        table.insert(waypoints, targetPos)
+        local escapeWaypoints = Utils.getSpawnEscapeWaypoints(Vector3.new(monsterPos.X, monsterPos.Y, monsterPos.Z))
+        -- Lower all escape waypoints to underground level
+        for _, waypoint in ipairs(escapeWaypoints) do
+            table.insert(waypoints, Vector3.new(waypoint.X, undergroundY, waypoint.Z))
+        end
     else
-        -- Direct path to target
-        table.insert(waypoints, targetPos)
+        -- Go underground first, then tween horizontally
+        local undergroundStart = Vector3.new(currentPos.X, undergroundY, currentPos.Z)
+        table.insert(waypoints, undergroundStart)
     end
+    
+    -- Final waypoint is UNDER the monster
+    table.insert(waypoints, targetPos)
+    
+    print(string.format("[MONSTER] 🌍 Tweening UNDERGROUND (%.1f studs below, horizontal approach)", MonsterState.layupOffset))
+    
     local tweenId = tick()
     MonsterState.currentTweenId = tweenId
-    -- Function to tween through waypoints
+    
     local function tweenToNextWaypoint(waypointIndex)
+        if not State.monsterFarmEnabled then
+            print("[MONSTER] ⚠️ Monster farm disabled during tween, stopping")
+            return
+        end
+        
         if MonsterState.currentTweenId ~= tweenId then
             return
         end
+        
         if waypointIndex > #waypoints then
             MonsterState.isAtMonster = true
             MonsterState.tweenStartTime = 0
@@ -2448,6 +2471,9 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         
         local currentHrp = Utils.getHumanoidRootPart()
         if not currentHrp then return end
+        
+        currentHrp.AssemblyLinearVelocity = Vector3.zero
+        currentHrp.AssemblyAngularVelocity = Vector3.zero
         
         local nextWaypoint = waypoints[waypointIndex]
         local dist = (nextWaypoint - currentHrp.Position).Magnitude
@@ -2462,9 +2488,12 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         MonsterState.currentTween = TweenService:Create(currentHrp, tweenInfo, {CFrame = CFrame.new(nextWaypoint)})
         
         MonsterState.currentTween.Completed:Connect(function(playbackState)
+            if not State.monsterFarmEnabled then
+                return
+            end
+            
             if playbackState == Enum.PlaybackState.Completed and MonsterState.currentTweenId == tweenId then
                 print(string.format("[MONSTER] ✅ Reached waypoint %d/%d", waypointIndex, #waypoints))
-                -- Move to next waypoint
                 task.wait(0.1)
                 tweenToNextWaypoint(waypointIndex + 1)
             end
@@ -2473,11 +2502,11 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         MonsterState.currentTween:Play()
     end
     
-    -- Start tweening through waypoints
     tweenToNextWaypoint(1)
     
     return true
 end
+
 function MonsterFunctions.startTargetingLoop()
     MonsterState.targetConnection = Utils.cleanupConnection(MonsterState.targetConnection)
     
@@ -2508,7 +2537,6 @@ function MonsterFunctions.startTargetingLoop()
         local success, err = pcall(function()
             local currentTime = tick()
             
-            -- Weapon check
             if currentTime - lastWeaponCheck >= WEAPON_CHECK_INTERVAL then
                 lastWeaponCheck = currentTime
                 
@@ -2528,7 +2556,6 @@ function MonsterFunctions.startTargetingLoop()
             
             local target = MonsterState.currentTarget
             
-            -- Stuck detection
             if currentTime - lastStuckCheck >= STUCK_CHECK_INTERVAL then
                 lastStuckCheck = currentTime
                 
@@ -2606,7 +2633,6 @@ function MonsterFunctions.startTargetingLoop()
                     return
                 end
                 
-                -- Distance-based arrival check
                 local hrp = Utils.getHumanoidRootPart()
                 if hrp then
                     local distToMonster = (hrp.Position - monsterPos).Magnitude
@@ -2784,9 +2810,9 @@ function MonsterFunctions.stopFarming()
     MonsterState.tweenStartTime = 0
     State.currentTargetMonster = nil
     State.waitingForRespawn = false
+    
+    print("[MONSTER] 🛑 Monster farming fully stopped and cleaned up")
 end
-
-
 
 do
     Tabs.Home:AddParagraph({
@@ -2900,11 +2926,10 @@ do
     })
 end
 
-
 do
     Tabs.Mining:AddParagraph({
         Title = "Auto Mining",
-        Content = "Configure and enable automatic mining with tween movement and noclip."
+        Content = "Configure and enable automatic mining with tween movement and noclip. Now tweens to CENTER of rocks!"
     })
     
     State.selectedRockTypes = {"Boulder"}
@@ -2939,18 +2964,6 @@ do
         Default = "All",
         Callback = function(value)
             State.selectedLocation = value or "All"
-        end
-    })
-    
-    Tabs.Mining:AddSlider("MiningVerticalOffset", {
-        Title = "Vertical Offset",
-        Description = "Studs above (+) or below (-) the rock (max ±10)",
-        Default = -4,
-        Min = -10,
-        Max = 10,
-        Rounding = 1,
-        Callback = function(value)
-            State.miningVerticalOffset = value
         end
     })
     
@@ -3008,7 +3021,9 @@ do
         Callback = function()
             State.miningEnabled = false
             State.indexFarmEnabled = false
+            State.rareOreDetectionEnabled = false
             MiningFunctions.stopMining()
+            MiningFunctions.stopRareOreDetection()
             Utils.notify("Mining", "All mining stopped", 2)
         end
     })
@@ -3053,6 +3068,7 @@ do
             State.selectedRareOres = newOres
         end
     })
+    
     Tabs.Mining:AddInput("DiscordWebhook", {
         Title = "Discord Webhook URL",
         Description = "Enter your Discord webhook URL",
@@ -3157,7 +3173,7 @@ end
 do
     Tabs.Monster:AddParagraph({
         Title = "Monster Farm",
-        Content = "Automatically farm monsters with tween movement and optional auto-blocking."
+        Content = "Automatically farm monsters from UNDERGROUND! Tweens horizontally while staying below ground to attack from beneath."
     })
     
     State.selectedMonsters = {"Zombie"}
@@ -3184,18 +3200,15 @@ do
         end
     })
     
-    Tabs.Monster:AddSlider("MonsterVerticalOffset", {
-        Title = "Vertical Offset",
-        Description = "Studs above (+) or below (-) the monster (max ±10)",
-        Default = 2,
-        Min = -10,
-        Max = 10,
+    Tabs.Monster:AddSlider("LayupOffset", {
+        Title = "Underground Depth",
+        Description = "How far below monster to stay (studs below ground)",
+        Default = 5,
+        Min = 2,
+        Max = 15,
         Rounding = 1,
         Callback = function(value)
-            State.monsterVerticalOffset = math.clamp(value, -10, 10)
-            if State.monsterVerticalOffset ~= value then
-                Utils.notify("Monster Offset", "Clamped to safe range: " .. State.monsterVerticalOffset, 2)
-            end
+            MonsterState.layupOffset = tonumber(value) or 5
         end
     })
     
@@ -3273,7 +3286,6 @@ do
     })
 end
 
-
 do
     SaveManager:SetLibrary(Fluent)
     InterfaceManager:SetLibrary(Fluent)
@@ -3296,6 +3308,7 @@ do
     
     InterfaceManager:BuildInterfaceSection(Tabs.Settings)
     SaveManager:BuildConfigSection(Tabs.Settings)
+    
     Tabs.Settings:AddButton({
         Title = "Cleanup All",
         Description = "Stop all features and cleanup connections",
@@ -3306,19 +3319,16 @@ do
             State.noclipEnabled = false
             State.espEnabled = false
             State.autoBlockEnabled = false
+            State.rareOreDetectionEnabled = false
             
             MiningFunctions.stopMining()
-            
+            MiningFunctions.stopRareOreDetection()
             MonsterFunctions.stopFarming()
             MonsterFunctions.disableAutoBlock()
             PlayerFunctions.disableFly()
             PlayerFunctions.disableNoclip()
             PlayerFunctions.disableESP()
             
-
-            
-            State.rareOreDetectionEnabled = false
-            MiningFunctions.stopRareOreDetection()
             Utils.notify("Cleanup", "All features stopped and connections cleaned", 3)
         end
     })
@@ -3418,6 +3428,7 @@ Players.PlayerRemoving:Connect(function(player)
         MonsterFunctions.stopFarming()
     end
 end)
+
 local GC = getconnections or get_signal_cons
 if GC then
     for i, v in pairs(GC(LocalPlayer.Idled)) do
@@ -3434,4 +3445,4 @@ else
         VirtualUser:ClickButton2(Vector2.new())
     end)
 end
-print("[Jordon Hub] ✅ Script loaded successfully!")
+
