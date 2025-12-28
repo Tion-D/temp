@@ -2972,14 +2972,14 @@ do
         end
     })
     
-    Tabs.Mining:AddToggle("GoblinCaveUnlocked", {
-        Title = "Goblin Cave Unlocked",
-        Description = "Enable if you've unlocked the Goblin Cave",
-        Default = false,
-        Callback = function(value)
-            State.goblinCaveUnlocked = value
-        end
-    })
+    -- Tabs.Mining:AddToggle("GoblinCaveUnlocked", {
+    --     Title = "Goblin Cave Unlocked",
+    --     Description = "Enable if you've unlocked the Goblin Cave",
+    --     Default = false,
+    --     Callback = function(value)
+    --         State.goblinCaveUnlocked = value
+    --     end
+    -- })
     
     Tabs.Mining:AddToggle("AutoMining", {
         Title = "Enable Auto Mining",
@@ -3193,14 +3193,14 @@ do
         end
     })
     
-    Tabs.Monster:AddToggle("MonsterGoblinCave", {
-        Title = "Goblin Cave Unlocked",
-        Description = "Enable if you've unlocked the Goblin Cave",
-        Default = false,
-        Callback = function(value)
-            State.goblinCaveUnlocked = value
-        end
-    })
+    -- Tabs.Monster:AddToggle("MonsterGoblinCave", {
+    --     Title = "Goblin Cave Unlocked",
+    --     Description = "Enable if you've unlocked the Goblin Cave",
+    --     Default = false,
+    --     Callback = function(value)
+    --         State.goblinCaveUnlocked = value
+    --     end
+    -- })
     
     Tabs.Monster:AddToggle("AutoMonsterFarm", {
         Title = "Enable Monster Farm",
