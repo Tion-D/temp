@@ -156,7 +156,16 @@ local RareOreData = {
     ["Lightite"] = "https://static.wikitide.net/theforgewiki/thumb/1/11/Lightite.png/94px-Lightite.png",
     ["Demonite"] = "https://static.wikitide.net/theforgewiki/3/3d/Demonite.png",
     ["Darkryte"] = "https://static.wikitide.net/theforgewiki/thumb/8/83/Darkryte.png/128px-Darkryte.png",
-    ["Arcane Crystal Ore"] = "https://static.wikitide.net/theforgewiki/thumb/9/99/ArcaneCrystal.png/128px-ArcaneCrystal.png"
+    ["Arcane Crystal"] = "https://static.wikitide.net/theforgewiki/thumb/9/99/ArcaneCrystal.png/128px-ArcaneCrystal.png",
+    ["Velchire"] = "https://static.wikitide.net/theforgewiki/thumb/c/cf/Velchire_Ore.png/64px-Velchire_Ore.png",
+    ["Sanctis"] = "https://static.wikitide.net/theforgewiki/thumb/2/22/Sanctis_Ore.png/64px-Sanctis_Ore.png",
+    ["Snowite"] = "https://static.wikitide.net/theforgewiki/thumb/f/f6/Snowite_Ore.png/64px-Snowite_Ore.png",
+    ["Iceite"] = "https://static.wikitide.net/theforgewiki/thumb/6/6a/Iceite.png/64px-Iceite.png",
+    ["Voidstar"] = "https://static.wikitide.net/theforgewiki/3/32/Voidstar_Ore.png",
+    ["Etherealite"] = "https://static.wikitide.net/theforgewiki/2/23/Etherealite_Ore.png",
+    ["Suryafal"] = "https://static.wikitide.net/theforgewiki/thumb/2/26/Suryafal_Ore.png/64px-Suryafal_Ore.png",
+    ["Gargantuan"] = "https://static.wikitide.net/theforgewiki/thumb/3/34/Gargantuan_Ore.png/64px-Gargantuan_Ore.png",
+    ["Heavenite"] = "https://static.wikitide.net/theforgewiki/thumb/6/62/Heavenite.png/64px-Heavenite.png"
 }
 
 local RareOreTypes = {"Fireite", "Magmaite", "Lightite", "Demonite", "Darkryte", "Arcane Crystal", "Voidstar", "Etherealite", "Suryafal", "Heavenite", "Gargantuan", "Iceite", "Snowite", "Velchire", "Sanctis"}
