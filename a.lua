@@ -159,7 +159,7 @@ local RareOreData = {
     ["Arcane Crystal Ore"] = "https://static.wikitide.net/theforgewiki/thumb/9/99/ArcaneCrystal.png/128px-ArcaneCrystal.png"
 }
 
-local RareOreTypes = {"Fireite", "Magmaite", "Lightite", "Demonite", "Darkryte", "Arcane Crystal Ore"}
+local RareOreTypes = {"Fireite", "Magmaite", "Lightite", "Demonite", "Darkryte", "Arcane Crystal", "Voidstar", "Etherealite", "Suryafal", "Heavenite", "Gargantuan", "Iceite", "Snowite", "Velchire", "Sanctis"}
 
 local Connections = {}
 
@@ -3414,4 +3414,3 @@ else
         VirtualUser:ClickButton2(Vector2.new())
     end)
 end
-
