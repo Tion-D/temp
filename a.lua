@@ -2146,6 +2146,10 @@ end
 function MonsterFunctions.faceMonster(monster)
     if not monster or not monster.Parent then return false end
     
+    if MonsterState.currentTween then
+        return false
+    end
+    
     local hrp = Utils.getHumanoidRootPart()
     if not hrp or not hrp.Parent then return false end
     
@@ -2153,13 +2157,16 @@ function MonsterFunctions.faceMonster(monster)
     if not monsterPos then return false end
     
     local currentPos = hrp.Position
-    local lookVector = (monsterPos - currentPos).Unit
+    local direction = (monsterPos - currentPos)
+    
+    if direction.Magnitude < 1 then return false end
+    
+    local lookVector = direction.Unit
     local newCFrame = CFrame.new(currentPos, currentPos + Vector3.new(lookVector.X, 0, lookVector.Z))
     
     hrp.CFrame = newCFrame
     return true
 end
-
 function MonsterFunctions.getDistanceToMonster(monster)
     if not monster or not monster.Parent then return math.huge end
     local hrp = Utils.getHumanoidRootPart()
@@ -2934,6 +2941,8 @@ function MonsterFunctions.startAttackLoop()
     local ATTACK_RANGE = 15
     local lastHPPrint = 0
     local HP_PRINT_INTERVAL = 1.0
+    local lastFaceTime = 0
+    local FACE_INTERVAL = 0.2
     
     MonsterState.attackConnection = RunService.Heartbeat:Connect(function()
         if not State.monsterFarmEnabled then return end
@@ -2947,19 +2956,21 @@ function MonsterFunctions.startAttackLoop()
                 if monsterPos then
                     local dist = (hrp.Position - monsterPos).Magnitude
                     if dist <= ATTACK_RANGE then
-                        -- Face the monster before attacking (if enabled)
-                        if State.autoFaceMonster then
-                            MonsterFunctions.faceMonster(MonsterState.currentTarget)
+                        local currentTime = tick()
+
+                        if State.autoFaceMonster and not MonsterState.currentTween then
+                            if currentTime - lastFaceTime >= FACE_INTERVAL then
+                                lastFaceTime = currentTime
+                                MonsterFunctions.faceMonster(MonsterState.currentTarget)
+                            end
                         end
                         
                         MonsterFunctions.activateWeapon()
                         
-                        local currentTime = tick()
                         if currentTime - lastHPPrint >= HP_PRINT_INTERVAL then
                             lastHPPrint = currentTime
                             local health = Utils.getMonsterHealth(MonsterState.currentTarget)
                             if health then
-                                print(string.format("[MONSTER] ⚔️ %s HP: %d", MonsterState.currentTarget.Name, health))
                             end
                         end
                     end
