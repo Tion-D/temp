@@ -294,6 +294,70 @@ function Utils.cleanupBodyMovers()
     end
 end
 
+function Utils.detectDesync()
+    local hrp = Utils.getHumanoidRootPart()
+    if not hrp then return false end
+    
+    local velocity = hrp.AssemblyLinearVelocity
+    local speed = velocity.Magnitude
+    
+    -- Check if being flung (very high velocity)
+    if speed > 100 then
+        return true, speed
+    end
+    
+    -- Check if position is abnormal (very high Y position)
+    if hrp.Position.Y > 500 then
+        return true, speed
+    end
+    
+    return false, speed
+end
+
+function Utils.fixDesync()
+    local hrp = Utils.getHumanoidRootPart()
+    if not hrp then return false end
+    
+    print("[DESYNC FIX] 🔧 Detected client-server desync, fixing...")
+    
+    -- Stop all tweens
+    if State.miningEnabled then
+        MiningFunctions.cancelCurrentTween()
+    end
+    if State.monsterFarmEnabled then
+        MonsterFunctions.cancelCurrentTween()
+    end
+    
+    -- Reset all velocity
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    
+    -- Anchor character temporarily to force position sync
+    local character = Utils.getCharacter()
+    if character then
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.Velocity = Vector3.zero
+                part.RotVelocity = Vector3.zero
+            end
+        end
+    end
+    
+    -- Force humanoid to reset state
+    local humanoid = Utils.getHumanoid()
+    if humanoid then
+        humanoid:ChangeState(Enum.HumanoidStateType.Landing)
+        task.wait(0.1)
+    end
+    
+    -- Reset velocity again after state change
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    
+    print("[DESYNC FIX] ✅ Desync fixed, velocity reset")
+    return true
+end
+
 function Utils.getRockHealth(rock)
     if not rock then return nil end
     
@@ -589,6 +653,10 @@ local MiningState = {
     HEALTH_CHECK_INTERVAL = 5, 
     noProgressCount = 0,
     MAX_NO_PROGRESS = 2,
+    
+    lastDesyncCheck = 0,
+    DESYNC_CHECK_INTERVAL = 1.0,
+    DESYNC_VELOCITY_THRESHOLD = 50,
 }
 
 local function getPickaxeTool()
@@ -1363,6 +1431,20 @@ function MiningFunctions.startRareOreDetection()
             local target = MiningState.currentTarget
             local currentTime = tick()
             
+            -- Check for client-server desync
+            if currentTime - MiningState.lastDesyncCheck >= MiningState.DESYNC_CHECK_INTERVAL then
+                MiningState.lastDesyncCheck = currentTime
+                local isDesynced, speed = Utils.detectDesync()
+                if isDesynced then
+                    print(string.format("[RARE ORE] ⚠️ DESYNC DETECTED! Velocity: %.2f", speed))
+                    Utils.fixDesync()
+                    MiningState.isAtRock = false
+                    MiningState.isMining = false
+                    task.wait(0.3)
+                    return
+                end
+            end
+            
             if currentTime - lastStuckCheck >= STUCK_CHECK_INTERVAL then
                 lastStuckCheck = currentTime
                 
@@ -1648,6 +1730,20 @@ function MiningFunctions.startTargetingLoop()
         local success, err = pcall(function()
             local target = MiningState.currentTarget
             local currentTime = tick()
+            
+            -- Check for client-server desync
+            if currentTime - MiningState.lastDesyncCheck >= MiningState.DESYNC_CHECK_INTERVAL then
+                MiningState.lastDesyncCheck = currentTime
+                local isDesynced, speed = Utils.detectDesync()
+                if isDesynced then
+                    print(string.format("[MINING] ⚠️ DESYNC DETECTED! Velocity: %.2f", speed))
+                    Utils.fixDesync()
+                    MiningState.isAtRock = false
+                    MiningState.isMining = false
+                    task.wait(0.3)
+                    return
+                end
+            end
             
             if currentTime - lastStuckCheck >= STUCK_CHECK_INTERVAL then
                 lastStuckCheck = currentTime
@@ -1937,6 +2033,10 @@ local MonsterState = {
     tweenTimeout = 10,
     problematicMonsters = {},
     PROBLEMATIC_MONSTER_COOLDOWN = 60,
+    
+    lastDesyncCheck = 0,
+    DESYNC_CHECK_INTERVAL = 1.0,
+    DESYNC_VELOCITY_THRESHOLD = 50,
 }
 
 function MonsterFunctions.getPlayerNameFromClaim(claimValue)
@@ -2533,6 +2633,19 @@ function MonsterFunctions.startTargetingLoop()
         
         local success, err = pcall(function()
             local currentTime = tick()
+            
+            -- Check for client-server desync
+            if currentTime - MonsterState.lastDesyncCheck >= MonsterState.DESYNC_CHECK_INTERVAL then
+                MonsterState.lastDesyncCheck = currentTime
+                local isDesynced, speed = Utils.detectDesync()
+                if isDesynced then
+                    print(string.format("[MONSTER] ⚠️ DESYNC DETECTED! Velocity: %.2f", speed))
+                    Utils.fixDesync()
+                    MonsterState.isAtMonster = false
+                    task.wait(0.3)
+                    return
+                end
+            end
             
             if currentTime - lastWeaponCheck >= WEAPON_CHECK_INTERVAL then
                 lastWeaponCheck = currentTime
@@ -3339,6 +3452,20 @@ do
             PlayerFunctions.disableESP()
             
             Utils.notify("Cleanup", "All features stopped and connections cleaned", 3)
+        end
+    })
+    
+    Tabs.Settings:AddButton({
+        Title = "Fix Desync (Emergency)",
+        Description = "Fix client-server position desync / being flung",
+        Callback = function()
+            local isDesynced, speed = Utils.detectDesync()
+            if isDesynced then
+                Utils.fixDesync()
+                Utils.notify("Desync Fix", string.format("Fixed! (Velocity was: %.2f)", speed), 3)
+            else
+                Utils.notify("Desync Check", "No desync detected", 2)
+            end
         end
     })
 end
