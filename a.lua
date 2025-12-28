@@ -669,11 +669,7 @@ local MiningState = {
     lastHealthCheckTime = 0,
     HEALTH_CHECK_INTERVAL = 5, 
     noProgressCount = 0,
-    MAX_NO_PROGRESS = 2,
-    
-    lastDesyncCheck = 0,
-    DESYNC_CHECK_INTERVAL = 1.0,
-    DESYNC_VELOCITY_THRESHOLD = 50,
+    MAX_NO_PROGRESS = 2
 }
 
 local function getPickaxeTool()
@@ -1721,7 +1717,6 @@ function MiningFunctions.stopRareOreDetection()
         MiningFunctions.disableRockCam()
     end
 end
-
 function MiningFunctions.startTargetingLoop()
     MiningState.targetConnection = Utils.cleanupConnection(MiningState.targetConnection)
     
@@ -1731,36 +1726,18 @@ function MiningFunctions.startTargetingLoop()
     local RETWEEN_INTERVAL = 0.3
     local STUCK_CHECK_INTERVAL = 0.5
     local lastStuckCheck = 0
-    local errorCount = 0
-    local MAX_ERRORS = 5
+    -- REMOVED: errorCount and MAX_ERRORS
     
     MiningState.targetConnection = RunService.Heartbeat:Connect(function()
         if not State.miningEnabled then return end
         
-        if errorCount >= MAX_ERRORS then
-            Utils.notify("Mining Error", "Too many errors, stopping mining", 3)
-            State.miningEnabled = false
-            MiningFunctions.stopMining()
-            return
-        end
+        -- REMOVED: errorCount >= MAX_ERRORS check
         
         local success, err = pcall(function()
             local target = MiningState.currentTarget
             local currentTime = tick()
             
-            -- Check for client-server desync
-            if currentTime - MiningState.lastDesyncCheck >= MiningState.DESYNC_CHECK_INTERVAL then
-                MiningState.lastDesyncCheck = currentTime
-                local isDesynced, speed = Utils.detectDesync()
-                if isDesynced then
-                    print(string.format("[MINING] ⚠️ DESYNC DETECTED! Velocity: %.2f", speed))
-                    Utils.fixDesync()
-                    MiningState.isAtRock = false
-                    MiningState.isMining = false
-                    task.wait(0.3)
-                    return
-                end
-            end
+            -- REMOVED: Desync check block
             
             if currentTime - lastStuckCheck >= STUCK_CHECK_INTERVAL then
                 lastStuckCheck = currentTime
@@ -1776,7 +1753,7 @@ function MiningFunctions.startTargetingLoop()
                         if newRock then
                             MiningState.currentTarget = newRock
                             MiningState.rockNotFoundCount = 0
-                            errorCount = 0
+                            -- REMOVED: errorCount = 0
                             
                             lastTweenTime = currentTime
                             lastSearchTime = currentTime
@@ -1817,8 +1794,8 @@ function MiningFunctions.startTargetingLoop()
                         MiningState.isAtRock = false
                         MiningState.isMining = false
                         MiningState.lastRockHealth = nil
-                        MiningState.noProgressCount = 0 
-                        errorCount = 0
+                        MiningState.noProgressCount = 0
+                        -- REMOVED: errorCount = 0
                         
                         lastTweenTime = currentTime
                         lastSearchTime = currentTime
@@ -1905,7 +1882,7 @@ function MiningFunctions.startTargetingLoop()
                         MiningState.isMining = false
                         MiningState.lastRockHealth = nil
                         MiningState.noProgressCount = 0
-                        errorCount = 0 
+                        -- REMOVED: errorCount = 0
                         
                         lastTweenTime = currentTime
                         MiningFunctions.tweenToRock(newRock, false)
@@ -1932,8 +1909,8 @@ function MiningFunctions.startTargetingLoop()
         end)
         
         if not success then
-            errorCount = errorCount + 1
-            warn("[Mining Error " .. errorCount .. "/" .. MAX_ERRORS .. "]:", err)
+            -- CHANGED: Just warn, don't count errors or stop
+            warn("[Mining Error]:", err)
         end
     end)
 end
@@ -2049,11 +2026,7 @@ local MonsterState = {
     tweenStartTime = 0,
     tweenTimeout = 10,
     problematicMonsters = {},
-    PROBLEMATIC_MONSTER_COOLDOWN = 60,
-    
-    lastDesyncCheck = 0,
-    DESYNC_CHECK_INTERVAL = 1.0,
-    DESYNC_VELOCITY_THRESHOLD = 50,
+    PROBLEMATIC_MONSTER_COOLDOWN = 60
 }
 
 function MonsterFunctions.getPlayerNameFromClaim(claimValue)
@@ -2560,36 +2533,13 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         return false
     end
 
-    -- Check for existing high velocity (sign of desync) BEFORE doing anything
-    local currentVelocity = hrp.AssemblyLinearVelocity.Magnitude
-    if currentVelocity > 50 then
-        print(string.format("[MONSTER] ⚠️ High velocity detected (%.2f), fixing before tween...", currentVelocity))
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        
-        local camera = workspace.CurrentCamera
-        if camera then
-            camera.CameraType = Enum.CameraType.Custom
-        end
-        
-        task.wait(0.1)
-        
-        -- RE-GET hrp after wait since character may have changed
-        hrp = Utils.getHumanoidRootPart()
-        if not hrp then 
-            print("[MONSTER] ⚠️ Character lost after desync fix, aborting tween")
-            return false 
-        end
-    end
+    -- REMOVED: High velocity desync check block
 
     MonsterFunctions.cancelCurrentTween()
     
-    -- Re-check hrp is still valid after cancel
-    hrp = Utils.getHumanoidRootPart()
-    if not hrp then return false end
-    
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
+
     
     MonsterState.stuckCount = 0
     MonsterState.lastPosition = hrp.Position
@@ -2697,8 +2647,6 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     
     return true
 end
-
-
 function MonsterFunctions.startTargetingLoop()
     MonsterState.targetConnection = Utils.cleanupConnection(MonsterState.targetConnection)
     
@@ -2713,34 +2661,17 @@ function MonsterFunctions.startTargetingLoop()
     local WEAPON_CHECK_INTERVAL = 5.0
     local STUCK_CHECK_INTERVAL = 0.5
     local lastStuckCheck = 0
-    local errorCount = 0
-    local MAX_ERRORS = 5
+    -- REMOVED: errorCount and MAX_ERRORS
     
     MonsterState.targetConnection = RunService.Heartbeat:Connect(function()
         if not State.monsterFarmEnabled then return end
         
-        if errorCount >= MAX_ERRORS then
-            Utils.notify("Monster Farm Error", "Too many errors, stopping", 3)
-            State.monsterFarmEnabled = false
-            MonsterFunctions.stopFarming()
-            return
-        end
+        -- REMOVED: errorCount >= MAX_ERRORS check
         
         local success, err = pcall(function()
             local currentTime = tick()
             
-            -- Check for client-server desync
-            if currentTime - MonsterState.lastDesyncCheck >= MonsterState.DESYNC_CHECK_INTERVAL then
-                MonsterState.lastDesyncCheck = currentTime
-                local isDesynced, speed = Utils.detectDesync()
-                if isDesynced then
-                    print(string.format("[MONSTER] ⚠️ DESYNC DETECTED! Velocity: %.2f", speed))
-                    Utils.fixDesync()
-                    MonsterState.isAtMonster = false
-                    task.wait(0.3)
-                    return
-                end
-            end
+            -- REMOVED: Desync check block
             
             if currentTime - lastWeaponCheck >= WEAPON_CHECK_INTERVAL then
                 lastWeaponCheck = currentTime
@@ -2752,8 +2683,7 @@ function MonsterFunctions.startTargetingLoop()
                         print("[MONSTER] ⚠️ Weapon not equipped, re-equipping...")
                         if not MonsterFunctions.equipWeapon() then
                             Utils.notify("Monster Farm", "Failed to equip weapon!", 3)
-                            errorCount = errorCount + 1
-                            return
+                            -- REMOVED: errorCount increment and return
                         end
                     end
                 end
@@ -2775,7 +2705,7 @@ function MonsterFunctions.startTargetingLoop()
                         if newMonster then
                             MonsterState.currentTarget = newMonster
                             MonsterState.isAtMonster = false
-                            errorCount = 0
+                            -- REMOVED: errorCount = 0
                             
                             local newMonsterPos = MonsterFunctions.getMonsterPosition(newMonster)
                             lastMonsterPos = newMonsterPos
@@ -2795,7 +2725,6 @@ function MonsterFunctions.startTargetingLoop()
             if target and target.Parent then
                 local monsterPos = MonsterFunctions.getMonsterPosition(target)
                 
-                -- If monster has no valid position, find a new one
                 if not monsterPos then
                     print(string.format("[MONSTER] ⚠️ Target %s has no valid position/HRP, finding new target...", target.Name))
                     MonsterState.currentTarget = nil
@@ -2824,7 +2753,7 @@ function MonsterFunctions.startTargetingLoop()
                         end
                         MonsterState.currentTarget = newMonster
                         MonsterState.isAtMonster = false
-                        errorCount = 0
+                        -- REMOVED: errorCount = 0
                         
                         local newMonsterPos = MonsterFunctions.getMonsterPosition(newMonster)
                         lastMonsterPos = newMonsterPos
@@ -2859,7 +2788,6 @@ function MonsterFunctions.startTargetingLoop()
                         MonsterState.isAtMonster = true
                         MonsterState.stuckCount = 0
                     elseif MonsterState.isAtMonster and distToMonster > tonumber(MonsterState.arrivalDistance or 5) + 5 then
-                        -- Monster moved away while we were attacking it
                         print(string.format("[MONSTER] ⚠️ Monster moved away! (Distance: %.2f) Re-tweening...", distToMonster))
                         MonsterState.isAtMonster = false
                         lastTweenTime = currentTime - RETWEEN_INTERVAL
@@ -2916,7 +2844,7 @@ function MonsterFunctions.startTargetingLoop()
                         
                         MonsterState.currentTarget = newMonster
                         MonsterState.isAtMonster = false
-                        errorCount = 0
+                        -- REMOVED: errorCount = 0
                         
                         local monsterPos = MonsterFunctions.getMonsterPosition(newMonster)
                         lastMonsterPos = monsterPos
@@ -2929,8 +2857,8 @@ function MonsterFunctions.startTargetingLoop()
         end)
         
         if not success then
-            errorCount = errorCount + 1
-            warn("[Monster Farm Error " .. errorCount .. "/" .. MAX_ERRORS .. "]:", err)
+            -- CHANGED: Just warn, don't count errors or stop
+            warn("[Monster Farm Error]:", err)
         end
     end)
 end
@@ -3565,19 +3493,6 @@ do
         end
     })
     
-    Tabs.Settings:AddButton({
-        Title = "Fix Desync (Emergency)",
-        Description = "Fix client-server position desync / being flung",
-        Callback = function()
-            local isDesynced, speed = Utils.detectDesync()
-            if isDesynced then
-                Utils.fixDesync()
-                Utils.notify("Desync Fix", string.format("Fixed! (Velocity was: %.2f)", speed), 3)
-            else
-                Utils.notify("Desync Check", "No desync detected", 2)
-            end
-        end
-    })
 end
 
 local function onCharacterDied()
