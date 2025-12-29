@@ -783,12 +783,15 @@ function KillAuraFunctions.findNearbyEnemy(radius)
 end
 
 function KillAuraFunctions.startKillAura()
-    KillAuraFunctions.stopKillAura()
+    -- Don't call stopKillAura() here as it sets State.killAuraEnabled = false
+    -- Just cleanup the connection directly
+    KillAuraState.connection = Utils.cleanupConnection(KillAuraState.connection)
     
     KillAuraState.isKilling = false
     KillAuraState.wasUsingPickaxe = false
     KillAuraState.lastSwingTime = 0
     KillAuraState.lastCheck = 0
+    
     
     KillAuraState.connection = RunService.Heartbeat:Connect(function()
         if not State.killAuraEnabled then return end
@@ -808,7 +811,7 @@ function KillAuraFunctions.startKillAura()
                 -- Enemy found nearby
                 if not KillAuraState.isKilling then
                     -- First detection - swap to weapon
-                    print(string.format("[KILL AURA] ⚔️ Enemy detected within %.1f studs! Swapping to weapon...", dist))
+                    print(string.format("[KILL AURA] ⚔️ Enemy detected: %s within %.1f studs! Swapping to weapon...", enemy.Name, dist))
                     
                     -- Check if currently using pickaxe
                     local char = Utils.getCharacter()
@@ -819,7 +822,12 @@ function KillAuraFunctions.startKillAura()
                         end
                     end
                     
-                    KillAuraFunctions.equipWeapon()
+                    local equipped = KillAuraFunctions.equipWeapon()
+                    if equipped then
+                        print("[KILL AURA] ✅ Weapon equipped successfully")
+                    else
+                        print("[KILL AURA] ⚠️ Failed to equip weapon!")
+                    end
                     KillAuraState.isKilling = true
                 end
                 
@@ -852,8 +860,6 @@ function KillAuraFunctions.startKillAura()
 end
 
 function KillAuraFunctions.stopKillAura()
-    State.killAuraEnabled = false
-    
     KillAuraState.connection = Utils.cleanupConnection(KillAuraState.connection)
     
     if KillAuraState.isKilling and KillAuraState.wasUsingPickaxe then
@@ -865,7 +871,6 @@ function KillAuraFunctions.stopKillAura()
     
     print("[KILL AURA] 🛑 Kill Aura disabled")
 end
-
 
 local function getPickaxeTool()
     local char = LocalPlayer.Character
@@ -3480,22 +3485,21 @@ do
             State.killAuraRadius = tonumber(value) or 5
         end
     })
-    
     Tabs.Mining:AddToggle("KillAura", {
         Title = "Enable Kill Aura",
         Description = "Auto-attack enemies near you while mining (swaps weapon automatically)",
         Default = false,
         Callback = function(enabled)
-            State.killAuraEnabled = enabled
             if enabled then
+                State.killAuraEnabled = true
                 KillAuraFunctions.startKillAura()
             else
+                State.killAuraEnabled = false
                 KillAuraFunctions.stopKillAura()
                 Utils.notify("Kill Aura", "Disabled", 2)
             end
         end
     })
-
     Tabs.Mining:AddSection("Rare Ore Detection")
 
     Tabs.Mining:AddDropdown("RareOreTypes", {
