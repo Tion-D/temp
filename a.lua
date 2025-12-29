@@ -138,11 +138,17 @@ local State = {
     goblinCaveExists = false,
     goblinCaveUnlocked = false,
 
+    killAuraEnabled = false,
+    killAuraRadius = 5,
+    killAuraConnection = nil,
+    wasUsingPickaxe = false,
+    currentlyKilling = false,
+
     rareOreDetectionEnabled = false,
     selectedRareOres = {},
     discordWebhook = "",
     discordUserId = "",
-    rareOreCheckInterval = 0.5,
+    rareOreCheckInterval = 0.15,
     rockMaintenanceInterval = 20.0,
     lastRockMaintenance = 0,
     initialRockHealth = nil,
@@ -647,6 +653,218 @@ local MiningState = {
     noProgressCount = 0,
     MAX_NO_PROGRESS = 2
 }
+local KillAuraFunctions = {}
+
+local KillAuraState = {
+    connection = nil,
+    isKilling = false,
+    wasUsingPickaxe = false,
+    lastSwingTime = 0,
+    SWING_COOLDOWN = 0.15,
+    checkInterval = 0.1,
+    lastCheck = 0,
+}
+
+function KillAuraFunctions.getWeaponTool()
+    local char = LocalPlayer.Character
+    if char then
+        for _, t in ipairs(char:GetChildren()) do
+            if t:IsA("Tool") and t.Name == "Weapon" then
+                return t
+            end
+        end
+    end
+
+    local bp = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if bp then
+        for _, t in ipairs(bp:GetChildren()) do
+            if t:IsA("Tool") and t.Name == "Weapon" then
+                return t
+            end
+        end
+    end
+
+    return nil
+end
+
+function KillAuraFunctions.equipWeapon()
+    local char = Utils.getCharacter()
+    if not char then return false end
+    
+    local humanoid = Utils.getHumanoid()
+    if not humanoid then return false end
+    
+    -- Check if already equipped
+    local equippedTool = char:FindFirstChildWhichIsA("Tool")
+    if equippedTool and equippedTool.Name == "Weapon" then
+        return true
+    end
+    
+    -- Remember if we had a pickaxe equipped
+    if equippedTool and equippedTool.Name:lower():find("pickaxe") then
+        KillAuraState.wasUsingPickaxe = true
+    end
+    
+    local weapon = KillAuraFunctions.getWeaponTool()
+    if not weapon then
+        return false
+    end
+    
+    humanoid:EquipTool(weapon)
+    return true
+end
+
+function KillAuraFunctions.equipPickaxe()
+    local char = Utils.getCharacter()
+    if not char then return false end
+    
+    local humanoid = Utils.getHumanoid()
+    if not humanoid then return false end
+    
+    local pickaxe = getPickaxeTool()
+    if not pickaxe then
+        return false
+    end
+    
+    humanoid:EquipTool(pickaxe)
+    return true
+end
+
+function KillAuraFunctions.swingWeapon()
+    local currentTime = tick()
+    if currentTime - KillAuraState.lastSwingTime < KillAuraState.SWING_COOLDOWN then
+        return
+    end
+    
+    local char = Utils.getCharacter()
+    if not char then return end
+    
+    local weapon = char:FindFirstChild("Weapon")
+    if not weapon or not weapon:IsA("Tool") then
+        return
+    end
+    
+    pcall(function()
+        ToolActivatedRemote:InvokeServer(weapon.Name, false)
+    end)
+    
+    KillAuraState.lastSwingTime = currentTime
+end
+
+function KillAuraFunctions.findNearbyEnemy(radius)
+    local hrp = Utils.getHumanoidRootPart()
+    if not hrp then return nil end
+    
+    local living = workspace:FindFirstChild("Living")
+    if not living then return nil end
+    
+    local myPos = hrp.Position
+    local closestEnemy = nil
+    local closestDist = radius
+    
+    for _, entity in pairs(living:GetChildren()) do
+        -- Check if it's a monster (has HumanoidRootPart and is not a player)
+        local entityHRP = entity:FindFirstChild("HumanoidRootPart")
+        if entityHRP then
+            local dist = (entityHRP.Position - myPos).Magnitude
+            if dist <= radius and dist < closestDist then
+                -- Check if it's alive
+                local hp = Utils.getMonsterHealth(entity)
+                if not hp or hp > 0 then
+                    closestEnemy = entity
+                    closestDist = dist
+                end
+            end
+        end
+    end
+    
+    return closestEnemy, closestDist
+end
+
+function KillAuraFunctions.startKillAura()
+    KillAuraFunctions.stopKillAura()
+    
+    KillAuraState.isKilling = false
+    KillAuraState.wasUsingPickaxe = false
+    KillAuraState.lastSwingTime = 0
+    KillAuraState.lastCheck = 0
+    
+    KillAuraState.connection = RunService.Heartbeat:Connect(function()
+        if not State.killAuraEnabled then return end
+        
+        local currentTime = tick()
+        
+        -- Throttle checks
+        if currentTime - KillAuraState.lastCheck < KillAuraState.checkInterval then
+            return
+        end
+        KillAuraState.lastCheck = currentTime
+        
+        local success, err = pcall(function()
+            local enemy, dist = KillAuraFunctions.findNearbyEnemy(State.killAuraRadius)
+            
+            if enemy then
+                -- Enemy found nearby
+                if not KillAuraState.isKilling then
+                    -- First detection - swap to weapon
+                    print(string.format("[KILL AURA] ⚔️ Enemy detected within %.1f studs! Swapping to weapon...", dist))
+                    
+                    -- Check if currently using pickaxe
+                    local char = Utils.getCharacter()
+                    if char then
+                        local equippedTool = char:FindFirstChildWhichIsA("Tool")
+                        if equippedTool and equippedTool.Name:lower():find("pickaxe") then
+                            KillAuraState.wasUsingPickaxe = true
+                        end
+                    end
+                    
+                    KillAuraFunctions.equipWeapon()
+                    KillAuraState.isKilling = true
+                end
+                
+                -- Swing at enemy
+                KillAuraFunctions.swingWeapon()
+                
+            else
+                -- No enemy nearby
+                if KillAuraState.isKilling then
+                    -- Was killing, now done - swap back to pickaxe
+                    print("[KILL AURA] ✅ Area clear! Swapping back to pickaxe...")
+                    
+                    if KillAuraState.wasUsingPickaxe then
+                        task.wait(0.1) -- Small delay before swapping back
+                        KillAuraFunctions.equipPickaxe()
+                    end
+                    
+                    KillAuraState.isKilling = false
+                    KillAuraState.wasUsingPickaxe = false
+                end
+            end
+        end)
+        
+        if not success then
+            warn("[Kill Aura Error]:", err)
+        end
+    end)
+    
+    Utils.notify("Kill Aura", "Enabled - Will attack nearby enemies", 2)
+end
+
+function KillAuraFunctions.stopKillAura()
+    State.killAuraEnabled = false
+    
+    KillAuraState.connection = Utils.cleanupConnection(KillAuraState.connection)
+    
+    if KillAuraState.isKilling and KillAuraState.wasUsingPickaxe then
+        KillAuraFunctions.equipPickaxe()
+    end
+    
+    KillAuraState.isKilling = false
+    KillAuraState.wasUsingPickaxe = false
+    
+    print("[KILL AURA] 🛑 Kill Aura disabled")
+end
+
 
 local function getPickaxeTool()
     local char = LocalPlayer.Character
@@ -3233,6 +3451,35 @@ do
                 MiningFunctions.enableRockCam()
             else
                 MiningFunctions.disableRockCam()
+            end
+        end
+    })
+
+    Tabs.Mining:AddSection("Kill Aura")
+    
+    Tabs.Mining:AddSlider("KillAuraRadius", {
+        Title = "Kill Aura Radius",
+        Description = "Detection radius for nearby enemies (studs)",
+        Default = 5,
+        Min = 3,
+        Max = 15,
+        Rounding = 1,
+        Callback = function(value)
+            State.killAuraRadius = tonumber(value) or 5
+        end
+    })
+    
+    Tabs.Mining:AddToggle("KillAura", {
+        Title = "Enable Kill Aura",
+        Description = "Auto-attack enemies near you while mining (swaps weapon automatically)",
+        Default = false,
+        Callback = function(enabled)
+            State.killAuraEnabled = enabled
+            if enabled then
+                KillAuraFunctions.startKillAura()
+            else
+                KillAuraFunctions.stopKillAura()
+                Utils.notify("Kill Aura", "Disabled", 2)
             end
         end
     })
