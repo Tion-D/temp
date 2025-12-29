@@ -636,6 +636,9 @@ local MiningState = {
     ROCK_COOLDOWN = 30,
     notificationSentForRock = false,
     isCheckingOre = false,
+    rockStartTime = 0,
+    MAX_ROCK_TIME = 120,
+    lastDebugPrint = 0,
     
     lastPosition = nil,
     lastPositionTime = 0,
@@ -655,6 +658,7 @@ local MiningState = {
     noProgressCount = 0,
     MAX_NO_PROGRESS = 2
 }
+
 local KillAuraFunctions = {}
 
 local KillAuraState = {
@@ -1627,7 +1631,6 @@ function MiningFunctions.tweenToRock(rock, useInstantTeleport)
     
     return true
 end
-
 function MiningFunctions.startRareOreDetection()
     MiningState.rareOreConnection = Utils.cleanupConnection(MiningState.rareOreConnection)
     
@@ -1645,6 +1648,27 @@ function MiningFunctions.startRareOreDetection()
             local target = MiningState.currentTarget
             local currentTime = tick()
             
+            -- Periodic debug logging
+            if currentTime - MiningState.lastDebugPrint >= 10 then
+                MiningState.lastDebugPrint = currentTime
+                if target and target.Parent then
+                    local hp = Utils.getRockHealth(target)
+                    local timeAtRock = MiningState.rockStartTime > 0 and (currentTime - MiningState.rockStartTime) or 0
+                    print(string.format("[RARE ORE DEBUG] Target: %s | HP: %s | AtRock: %s | OreDetected: %s | MineOut: %s | TimeAtRock: %.1fs | isCheckingOre: %s", 
+                        target.Name or "nil",
+                        tostring(hp),
+                        tostring(MiningState.isAtRock),
+                        tostring(MiningState.oreDetected),
+                        tostring(MiningState.shouldMineOut),
+                        timeAtRock,
+                        tostring(MiningState.isCheckingOre)
+                    ))
+                else
+                    print("[RARE ORE DEBUG] No target, searching...")
+                end
+            end
+            
+            -- Stuck check
             if currentTime - lastStuckCheck >= STUCK_CHECK_INTERVAL then
                 lastStuckCheck = currentTime
                 
@@ -1653,23 +1677,23 @@ function MiningFunctions.startRareOreDetection()
                     local isTimedOut = MiningFunctions.checkTweenTimeout()
                     
                     if isStuck or isTimedOut then
-                        print("[RARE ORE] 🔧 Stuck or timed out, recovering...")
+                        print("[RARE ORE] 🔧 Stuck or timed out during travel, recovering...")
                         local newRock = MiningFunctions.handleStuckRecovery(target)
                         
                         if newRock then
                             MiningState.currentTarget = newRock
                             MiningState.oreDetected = false
                             MiningState.shouldMineOut = false
-                            State.initialRockHealth = nil
                             MiningState.notificationSentForRock = false
-                            
-                            local initialHP = Utils.getRockHealth(newRock)
-                            State.initialRockHealth = initialHP
+                            MiningState.isCheckingOre = false
+                            MiningState.rockStartTime = currentTime
+                            State.initialRockHealth = Utils.getRockHealth(newRock)
                             
                             lastTweenTime = currentTime
                             MiningFunctions.tweenToRock(newRock, true)
                         else
                             MiningState.currentTarget = nil
+                            MiningState.isCheckingOre = false
                             lastSearchTime = 0
                         end
                         return
@@ -1680,48 +1704,67 @@ function MiningFunctions.startRareOreDetection()
             if target and target.Parent then
                 local health = Utils.getRockHealth(target)
                 
-                if health and health <= 0 then
-                    print("[RARE ORE] Rock destroyed, finding new rock...")
+                -- Check if rock is destroyed OR health is nil for too long (broken rock)
+                local rockDestroyed = (health ~= nil and health <= 0)
+                
+                -- Check if we've been at this rock too long
+                local timeAtRock = MiningState.rockStartTime > 0 and (currentTime - MiningState.rockStartTime) or 0
+                local rockTimedOut = timeAtRock > MiningState.MAX_ROCK_TIME
+                
+                if rockDestroyed or rockTimedOut then
+                    if rockTimedOut then
+                        print(string.format("[RARE ORE] ⏰ Rock timed out after %.1f seconds, moving on...", timeAtRock))
+                        MiningFunctions.markRockAsProblematic(target)
+                    else
+                        print("[RARE ORE] Rock destroyed, finding new rock...")
+                    end
+                    
                     MiningState.currentTarget = nil
                     MiningState.oreDetected = false
                     MiningState.shouldMineOut = false
+                    MiningState.notificationSentForRock = false
+                    MiningState.isCheckingOre = false
+                    MiningState.rockStartTime = 0
                     State.initialRockHealth = nil
                     MiningState.isAtRock = false
-                    MiningState.notificationSentForRock = false
                     MiningState.stuckCount = 0
                     lastSearchTime = 0
                     return
                 end
                 
+                -- Check arrival
                 local currentDistance = MiningFunctions.getDistanceToRock(target)
                 if currentDistance <= tonumber(MiningState.arrivalDistance or 5) then
                     if not MiningState.isAtRock then
                         print(string.format("[RARE ORE] ✅ Arrived at rock! (Distance: %.2f)", currentDistance))
+                        MiningState.rockStartTime = currentTime  -- Start timing when we arrive
                     end
                     MiningState.isAtRock = true
                     MiningState.stuckCount = 0
                 end
                 
-                if MiningState.isAtRock and MiningState.isMining then
+                -- Check if pushed away
+                if MiningState.isAtRock then
                     local SHOVE_THRESHOLD = MiningState.arrivalDistance + 3
                     if currentDistance > SHOVE_THRESHOLD then
-                        print(string.format("[MINING] ⚠️ Pushed away from rock! (Distance: %.2f) Re-positioning...", currentDistance))
+                        print(string.format("[RARE ORE] ⚠️ Pushed away from rock! (Distance: %.2f) Re-positioning...", currentDistance))
                         MiningState.isAtRock = false
-                        MiningState.isMining = false
                         MiningFunctions.teleportToRock(target)
-                        MiningState.isMining = true
                     end
                 end
                 
+                -- Re-tween if not at rock
                 if not MiningState.isAtRock and currentTime - lastTweenTime >= RETWEEN_INTERVAL then
                     lastTweenTime = currentTime
                     MiningFunctions.tweenToRock(target, false)
                 end
                 
+                -- Update rock cam
                 pcall(function()
                     MiningFunctions.updateRockCam(target)
                 end)
                 
+                -- MAINTENANCE MODE: Rare ore found, preserve mode enabled
                 if State.stopMiningOnDetection and MiningState.oreDetected then
                     if currentTime - MiningState.lastMaintenanceHit >= State.rockMaintenanceInterval then
                         MiningState.lastMaintenanceHit = currentTime
@@ -1734,6 +1777,7 @@ function MiningFunctions.startRareOreDetection()
                     return
                 end
                 
+                -- MINE OUT MODE: Rare ore found, mining out the rock
                 if MiningState.shouldMineOut then
                     if MiningState.isAtRock then
                         local makingProgress = MiningFunctions.checkMiningProgress(target)
@@ -1745,14 +1789,17 @@ function MiningFunctions.startRareOreDetection()
                         
                         MiningFunctions.mineRock(target)
                     end
-               else
-                    if currentTime - MiningState.lastMineTime >= State.rareOreCheckInterval then
-                        MiningState.lastMineTime = currentTime
+                    return  -- Important: return here so we don't check for ore again
+                end
+                
+                -- DETECTION MODE: Mining and checking for ores
+                if currentTime - MiningState.lastMineTime >= State.rareOreCheckInterval then
+                    MiningState.lastMineTime = currentTime
+                    
+                    if MiningState.isAtRock and not MiningState.isCheckingOre then
+                        MiningState.isCheckingOre = true
                         
-                        -- Prevent re-entry during ore check (task.wait allows other heartbeats to run)
-                        if MiningState.isAtRock and not MiningState.isCheckingOre then
-                            MiningState.isCheckingOre = true
-                            
+                        local checkSuccess, checkErr = pcall(function()
                             -- Rapid swing to reveal ore faster
                             for i = 1, 3 do
                                 MiningFunctions.mineRock(target)
@@ -1767,13 +1814,13 @@ function MiningFunctions.startRareOreDetection()
                                 print(string.format("[RARE ORE] Detected ore: %s", detectedOre))
                                 
                                 local foundRareOre = false
-                               for _, rareOre in ipairs(State.selectedRareOres) do
+                                for _, rareOre in ipairs(State.selectedRareOres) do
                                     if detectedOre == rareOre or detectedOre:find(rareOre) then
                                         print(string.format("[RARE ORE] 💎 Found %s!", detectedOre))
                                         
                                         -- Only send Discord notification once per rock
                                         if not MiningState.notificationSentForRock then
-                                            MiningState.notificationSentForRock = true  -- Set IMMEDIATELY before async call
+                                            MiningState.notificationSentForRock = true
                                             local imageUrl = RareOreData[rareOre] or RareOreData["Fireite"]
                                             MiningFunctions.sendDiscordWebhook(detectedOre, imageUrl)
                                             print("[RARE ORE] 📨 Discord notification sent (will not send again for this rock)")
@@ -1795,7 +1842,8 @@ function MiningFunctions.startRareOreDetection()
                                     end
                                 end
 
-                                if not foundRareOre and not MiningState.shouldMineOut then
+                                -- Non-rare ore found, move to next rock
+                                if not foundRareOre then
                                     print(string.format("[RARE ORE] Found %s (not target), moving to next rock...", detectedOre))
                                     
                                     local oldRock = MiningState.currentTarget
@@ -1803,24 +1851,25 @@ function MiningFunctions.startRareOreDetection()
                                     MiningState.recentlyCheckedRocks[oldRock] = tick()
                                     print(string.format("[RARE ORE] Added rock to cooldown list for %d seconds", MiningState.ROCK_COOLDOWN))
                                     
+                                    -- Reset state BEFORE finding new rock
                                     MiningState.currentTarget = nil
                                     MiningState.isAtRock = false
                                     MiningState.stuckCount = 0
-                                    MiningState.isCheckingOre = false  -- Reset before return
+                                    MiningState.oreDetected = false
+                                    MiningState.shouldMineOut = false
+                                    MiningState.notificationSentForRock = false
+                                    MiningState.rockStartTime = 0
                                     
                                     local newRock = MiningFunctions.findNextRock(oldRock)
                                     
                                     if newRock then
-                                        print(string.format("[RARE ORE] ✅ Found different rock, moving to it..."))
+                                        print("[RARE ORE] ✅ Found different rock, moving to it...")
                                         MiningState.currentTarget = newRock
-                                        MiningState.isAtRock = false
                                         MiningState.lastMineTime = 0
                                         MiningState.lastMaintenanceHit = currentTime
-                                        MiningState.notificationSentForRock = false
                                         
-                                        local initialHP = Utils.getRockHealth(newRock)
-                                        State.initialRockHealth = initialHP
-                                        print(string.format("[RARE ORE] Initial rock HP: %.2f", initialHP or 0))
+                                        State.initialRockHealth = Utils.getRockHealth(newRock)
+                                        print(string.format("[RARE ORE] Initial rock HP: %.2f", State.initialRockHealth or 0))
                                         
                                         lastTweenTime = currentTime
                                         MiningFunctions.tweenToRock(newRock, false)
@@ -1833,23 +1882,32 @@ function MiningFunctions.startRareOreDetection()
                                         print("[RARE ORE] ⚠️ No other rocks available right now, will retry...")
                                         lastSearchTime = 0
                                     end
-                                    
-                                    return
                                 end
                             end
-                            
-                            MiningState.isCheckingOre = false  -- Reset at end
+                        end)
+                        
+                        -- ALWAYS reset isCheckingOre, even on error
+                        MiningState.isCheckingOre = false
+                        
+                        if not checkSuccess then
+                            warn("[RARE ORE] Ore check error:", checkErr)
                         end
                     end
                 end
+                
             else
+                -- No target, search for new rock
                 if currentTime - lastSearchTime >= SEARCH_COOLDOWN then
                     lastSearchTime = currentTime
                     
+                    -- Reset all state
                     MiningState.currentTarget = nil
                     MiningState.isAtRock = false
                     MiningState.oreDetected = false
                     MiningState.shouldMineOut = false
+                    MiningState.notificationSentForRock = false
+                    MiningState.isCheckingOre = false
+                    MiningState.rockStartTime = 0
                     MiningState.stuckCount = 0
                     
                     print("[RARE ORE] 🔍 Searching for new rock...")
@@ -1863,15 +1921,12 @@ function MiningFunctions.startRareOreDetection()
                     if newRock then
                         print("[RARE ORE] ✅ Found new rock!")
                         MiningState.currentTarget = newRock
-                        MiningState.isAtRock = false
                         MiningState.lastMineTime = 0
                         MiningState.lastMaintenanceHit = currentTime
                         MiningState.rockNotFoundCount = 0
-                        MiningState.notificationSentForRock = false
-
-                        local initialHP = Utils.getRockHealth(newRock)
-                        State.initialRockHealth = initialHP
-                        print(string.format("[RARE ORE] Initial rock HP: %.2f", initialHP or 0))
+                        
+                        State.initialRockHealth = Utils.getRockHealth(newRock)
+                        print(string.format("[RARE ORE] Initial rock HP: %.2f", State.initialRockHealth or 0))
                         
                         lastTweenTime = currentTime
                         MiningFunctions.tweenToRock(newRock, false)
@@ -1899,6 +1954,8 @@ function MiningFunctions.startRareOreDetection()
         
         if not success then
             warn("[Rare Ore Detection Error]:", err)
+            -- Reset stuck flags on error to prevent permanent lockup
+            MiningState.isCheckingOre = false
         end
     end)
 end
@@ -1919,14 +1976,15 @@ function MiningFunctions.stopRareOreDetection()
     MiningState.lastPosition = nil
     MiningState.tweenStartTime = 0
     MiningState.notificationSentForRock = false
-    MiningState.isCheckingOre = false  -- ADD THIS
+    MiningState.isCheckingOre = false
+    MiningState.rockStartTime = 0
+    MiningState.lastDebugPrint = 0
     State.initialRockHealth = nil
     
     if State.rockCamEnabled then
         MiningFunctions.disableRockCam()
     end
 end
-
 function MiningFunctions.startTargetingLoop()
     MiningState.targetConnection = Utils.cleanupConnection(MiningState.targetConnection)
     
