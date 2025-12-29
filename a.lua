@@ -376,6 +376,44 @@ function Utils.getMonsterHealth(monster)
     return nil
 end
 
+function Utils.respawnCharacter()
+    local player = LocalPlayer
+    local character = player.Character
+    
+    if character then
+        pcall(function()
+            character:BreakJoints()
+        end)
+        
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            pcall(function()
+                humanoid.Health = 0
+            end)
+        end
+    end
+    
+    pcall(function()
+        player:LoadCharacter()
+    end)
+    
+    print("[UTILS] 🔄 Respawning character...")
+end
+
+function Utils.isPositionInVoid(position)
+    if not position then return true end
+    if position.Y < -50 then
+        return true
+    end
+    return false
+end
+
+function Utils.isCharacterInVoid()
+    local hrp = Utils.getHumanoidRootPart()
+    if not hrp then return false end
+    return Utils.isPositionInVoid(hrp.Position)
+end
+
 local PlayerFunctions = {}
 
 function PlayerFunctions.setWalkSpeed(speed)
@@ -2422,11 +2460,24 @@ end
 
 function MonsterFunctions.teleportToMonster(monster)
     local hrp = Utils.getHumanoidRootPart()
-    if not hrp or not hrp.Parent or not monster or not monster.Parent then return false end
+    
+    if not hrp then
+        print("[MONSTER] ⚠️ HumanoidRootPart missing! Respawning character...")
+        Utils.respawnCharacter()
+        return false
+    end
+    
+    if not monster or not monster.Parent then return false end
     
     local monsterPos = MonsterFunctions.getMonsterPosition(monster)
     if not monsterPos then
         print(string.format("[MONSTER] ⚠️ Cannot teleport to %s - no valid position/HRP", monster.Name))
+        return false
+    end
+    
+    if Utils.isPositionInVoid(monsterPos) then
+        print(string.format("[MONSTER] ⚠️ Monster %s is in void (Y: %.2f), skipping...", monster.Name, monsterPos.Y))
+        MonsterFunctions.markMonsterAsProblematic(monster)
         return false
     end
     
@@ -2440,10 +2491,17 @@ function MonsterFunctions.teleportToMonster(monster)
     print("[MONSTER] ⚡ Instant teleport to monster center!")
     return true
 end
-
 function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     local hrp = Utils.getHumanoidRootPart()
-    if not hrp or not monster or not monster.Parent then return false end
+    
+    -- Check if HRP is missing - respawn character
+    if not hrp then
+        print("[MONSTER] ⚠️ HumanoidRootPart missing! Respawning character...")
+        Utils.respawnCharacter()
+        return false
+    end
+    
+    if not monster or not monster.Parent then return false end
     
     if not State.monsterFarmEnabled then
         print("[MONSTER] ⚠️ Monster farm disabled, aborting tween")
@@ -2455,14 +2513,25 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         print(string.format("[MONSTER] ⚠️ Cannot tween to %s - no valid position/HRP", monster.Name))
         return false
     end
-
-    -- REMOVED: High velocity desync check block
+    
+    -- Check if monster position is in void - skip this monster
+    if Utils.isPositionInVoid(monsterPos) then
+        print(string.format("[MONSTER] ⚠️ Monster %s is in void (Y: %.2f), skipping...", monster.Name, monsterPos.Y))
+        MonsterFunctions.markMonsterAsProblematic(monster)
+        return false
+    end
+    
+    -- Check if we're currently in the void - respawn
+    if Utils.isCharacterInVoid() then
+        print("[MONSTER] ⚠️ Character is in void! Respawning...")
+        Utils.respawnCharacter()
+        return false
+    end
 
     MonsterFunctions.cancelCurrentTween()
     
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
-
     
     MonsterState.stuckCount = 0
     MonsterState.lastPosition = hrp.Position
@@ -2516,16 +2585,16 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         end
         
         local currentHrp = Utils.getHumanoidRootPart()
-        if not currentHrp then return end
+        if not currentHrp then
+            print("[MONSTER] ⚠️ HumanoidRootPart lost during tween! Respawning...")
+            Utils.respawnCharacter()
+            return
+        end
         
-        -- NEW: Check for flinging mid-tween
-        local velocity = currentHrp.AssemblyLinearVelocity.Magnitude
-        if velocity > 100 then
-            print(string.format("[MONSTER] ⚠️ FLING DETECTED mid-tween! Velocity: %.2f, aborting...", velocity))
-            currentHrp.AssemblyLinearVelocity = Vector3.zero
-            currentHrp.AssemblyAngularVelocity = Vector3.zero
-            MonsterState.currentTweenId = nil -- Invalidate this tween
-            MonsterState.isAtMonster = false
+        -- Check if we fell into void during tween
+        if Utils.isCharacterInVoid() then
+            print("[MONSTER] ⚠️ Fell into void during tween! Respawning...")
+            Utils.respawnCharacter()
             return
         end
         
@@ -2533,6 +2602,14 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
         currentHrp.AssemblyAngularVelocity = Vector3.zero
         
         local nextWaypoint = waypoints[waypointIndex]
+        
+        -- Validate waypoint isn't in void
+        if Utils.isPositionInVoid(nextWaypoint) then
+            print("[MONSTER] ⚠️ Waypoint is in void, skipping...")
+            MonsterState.currentTweenId = nil
+            return
+        end
+        
         local dist = (nextWaypoint - currentHrp.Position).Magnitude
         local duration = math.clamp(dist / 50, 0.1, MonsterState.tweenTimeout - 1)
         
@@ -2550,7 +2627,6 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
             end
             
             if playbackState == Enum.PlaybackState.Completed and MonsterState.currentTweenId == tweenId then
-                -- NEW: Reset velocity after each waypoint completion
                 local hrpCheck = Utils.getHumanoidRootPart()
                 if hrpCheck then
                     hrpCheck.AssemblyLinearVelocity = Vector3.zero
@@ -2570,6 +2646,7 @@ function MonsterFunctions.tweenToMonster(monster, useInstantTeleport)
     
     return true
 end
+
 function MonsterFunctions.startTargetingLoop()
     MonsterState.targetConnection = Utils.cleanupConnection(MonsterState.targetConnection)
     
@@ -2593,8 +2670,21 @@ function MonsterFunctions.startTargetingLoop()
         
         local success, err = pcall(function()
             local currentTime = tick()
-            
-            -- REMOVED: Desync check block
+            if Utils.isCharacterInVoid() then
+                print("[MONSTER] ⚠️ Character in void! Respawning...")
+                MonsterFunctions.cancelCurrentTween()
+                MonsterState.currentTarget = nil
+                MonsterState.isAtMonster = false
+                Utils.respawnCharacter()
+                return
+            end
+            local hrp = Utils.getHumanoidRootPart()
+            if not hrp then
+                print("[MONSTER] ⚠️ HumanoidRootPart missing! Waiting for respawn...")
+                MonsterState.currentTarget = nil
+                MonsterState.isAtMonster = false
+                return
+            end
             
             if currentTime - lastWeaponCheck >= WEAPON_CHECK_INTERVAL then
                 lastWeaponCheck = currentTime
@@ -2794,10 +2884,28 @@ function MonsterFunctions.startAttackLoop()
     local HP_PRINT_INTERVAL = 1.0
     local lastFaceTime = 0
     local FACE_INTERVAL = 0.2
+    local lastVoidCheck = 0
+    local VOID_CHECK_INTERVAL = 0.5
     
     MonsterState.attackConnection = RunService.Heartbeat:Connect(function()
         if not State.monsterFarmEnabled then return end
         if State.isBlocking then return end
+        
+        local currentTime = tick()
+        
+        -- Periodic void check
+        if currentTime - lastVoidCheck >= VOID_CHECK_INTERVAL then
+            lastVoidCheck = currentTime
+            if Utils.isCharacterInVoid() then
+                print("[MONSTER] ⚠️ Character fell into void during combat! Respawning...")
+                MonsterFunctions.cancelCurrentTween()
+                MonsterState.currentTarget = nil
+                MonsterState.isAtMonster = false
+                Utils.respawnCharacter()
+                return
+            end
+        end
+        
         if not MonsterState.currentTarget or not MonsterState.currentTarget.Parent then return end
         
         if MonsterState.isAtMonster then
@@ -2807,8 +2915,6 @@ function MonsterFunctions.startAttackLoop()
                 if monsterPos then
                     local dist = (hrp.Position - monsterPos).Magnitude
                     if dist <= ATTACK_RANGE then
-                        local currentTime = tick()
-
                         if State.autoFaceMonster and not MonsterState.currentTween then
                             if currentTime - lastFaceTime >= FACE_INTERVAL then
                                 lastFaceTime = currentTime
