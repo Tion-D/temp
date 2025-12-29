@@ -635,6 +635,7 @@ local MiningState = {
     recentlyCheckedRocks = {},
     ROCK_COOLDOWN = 30,
     notificationSentForRock = false,
+    isCheckingOre = false,
     
     lastPosition = nil,
     lastPositionTime = 0,
@@ -1744,14 +1745,21 @@ function MiningFunctions.startRareOreDetection()
                         
                         MiningFunctions.mineRock(target)
                     end
-                else
+               else
                     if currentTime - MiningState.lastMineTime >= State.rareOreCheckInterval then
                         MiningState.lastMineTime = currentTime
                         
-                        if MiningState.isAtRock then
-                            MiningFunctions.mineRock(target)
+                        -- Prevent re-entry during ore check (task.wait allows other heartbeats to run)
+                        if MiningState.isAtRock and not MiningState.isCheckingOre then
+                            MiningState.isCheckingOre = true
                             
-                            task.wait()
+                            -- Rapid swing to reveal ore faster
+                            for i = 1, 3 do
+                                MiningFunctions.mineRock(target)
+                                task.wait(0.05)
+                            end
+                            
+                            task.wait(0.05)
                             
                             local detectedOre, oreModel = MiningFunctions.checkForOresInRock(target)
 
@@ -1763,10 +1771,11 @@ function MiningFunctions.startRareOreDetection()
                                     if detectedOre == rareOre or detectedOre:find(rareOre) then
                                         print(string.format("[RARE ORE] 💎 Found %s!", detectedOre))
                                         
+                                        -- Only send Discord notification once per rock
                                         if not MiningState.notificationSentForRock then
+                                            MiningState.notificationSentForRock = true  -- Set IMMEDIATELY before async call
                                             local imageUrl = RareOreData[rareOre] or RareOreData["Fireite"]
                                             MiningFunctions.sendDiscordWebhook(detectedOre, imageUrl)
-                                            MiningState.notificationSentForRock = true
                                             print("[RARE ORE] 📨 Discord notification sent (will not send again for this rock)")
                                         else
                                             print("[RARE ORE] ⏭️ Skipping Discord notification (already sent for this rock)")
@@ -1797,6 +1806,7 @@ function MiningFunctions.startRareOreDetection()
                                     MiningState.currentTarget = nil
                                     MiningState.isAtRock = false
                                     MiningState.stuckCount = 0
+                                    MiningState.isCheckingOre = false  -- Reset before return
                                     
                                     local newRock = MiningFunctions.findNextRock(oldRock)
                                     
@@ -1827,10 +1837,11 @@ function MiningFunctions.startRareOreDetection()
                                     return
                                 end
                             end
+                            
+                            MiningState.isCheckingOre = false  -- Reset at end
                         end
                     end
                 end
-                
             else
                 if currentTime - lastSearchTime >= SEARCH_COOLDOWN then
                     lastSearchTime = currentTime
@@ -1891,6 +1902,7 @@ function MiningFunctions.startRareOreDetection()
         end
     end)
 end
+
 function MiningFunctions.stopRareOreDetection()
     State.rareOreDetectionEnabled = false
     
@@ -1907,12 +1919,14 @@ function MiningFunctions.stopRareOreDetection()
     MiningState.lastPosition = nil
     MiningState.tweenStartTime = 0
     MiningState.notificationSentForRock = false
+    MiningState.isCheckingOre = false  -- ADD THIS
     State.initialRockHealth = nil
     
     if State.rockCamEnabled then
         MiningFunctions.disableRockCam()
     end
 end
+
 function MiningFunctions.startTargetingLoop()
     MiningState.targetConnection = Utils.cleanupConnection(MiningState.targetConnection)
     
