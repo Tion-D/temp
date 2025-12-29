@@ -312,74 +312,6 @@ function Utils.cleanupBodyMovers()
     end
 end
 
-function Utils.detectDesync()
-    local hrp = Utils.getHumanoidRootPart()
-    if not hrp then return false end
-    
-    local velocity = hrp.AssemblyLinearVelocity
-    local speed = velocity.Magnitude
-    
-    -- Check if being flung (very high velocity)
-    if speed > 100 then
-        return true, speed
-    end
-    
-    -- Check if position is abnormal (very high Y position)
-    if hrp.Position.Y > 500 then
-        return true, speed
-    end
-    
-    return false, speed
-end
-function Utils.fixDesync()
-    local hrp = Utils.getHumanoidRootPart()
-    if not hrp then return false end
-    
-    print("[DESYNC FIX] 🔧 Detected client-server desync, fixing...")
-    
-    -- Stop all tweens
-    if State.miningEnabled then
-        MiningFunctions.cancelCurrentTween()
-    end
-    if State.monsterFarmEnabled then
-        MonsterFunctions.cancelCurrentTween()
-    end
-    
-    -- Reset all velocity
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    hrp.AssemblyAngularVelocity = Vector3.zero
-    
-    -- Anchor character temporarily to force position sync
-    local character = Utils.getCharacter()
-    if character then
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.Velocity = Vector3.zero
-                part.RotVelocity = Vector3.zero
-            end
-        end
-    end
-    
-    -- NEW: Fix camera
-    local camera = workspace.CurrentCamera
-    if camera then
-        camera.CameraType = Enum.CameraType.Custom
-    end
-    
-    -- Force humanoid to reset state
-    local humanoid = Utils.getHumanoid()
-    if humanoid then
-        humanoid:ChangeState(Enum.HumanoidStateType.Landing)
-        task.wait(0.1)
-    end
-    
-    -- Reset velocity again after state change
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    hrp.AssemblyAngularVelocity = Vector3.zero
-    
-    print("[DESYNC FIX] ✅ Desync fixed, velocity reset")
-    return true
-end
 
 function Utils.getRockHealth(rock)
     if not rock then return nil end
@@ -1450,20 +1382,6 @@ function MiningFunctions.startRareOreDetection()
             local target = MiningState.currentTarget
             local currentTime = tick()
             
-            -- Check for client-server desync
-            if currentTime - MiningState.lastDesyncCheck >= MiningState.DESYNC_CHECK_INTERVAL then
-                MiningState.lastDesyncCheck = currentTime
-                local isDesynced, speed = Utils.detectDesync()
-                if isDesynced then
-                    print(string.format("[RARE ORE] ⚠️ DESYNC DETECTED! Velocity: %.2f", speed))
-                    Utils.fixDesync()
-                    MiningState.isAtRock = false
-                    MiningState.isMining = false
-                    task.wait(0.3)
-                    return
-                end
-            end
-            
             if currentTime - lastStuckCheck >= STUCK_CHECK_INTERVAL then
                 lastStuckCheck = currentTime
                 
@@ -1701,7 +1619,6 @@ function MiningFunctions.startRareOreDetection()
         end
     end)
 end
-
 function MiningFunctions.stopRareOreDetection()
     State.rareOreDetectionEnabled = false
     
