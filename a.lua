@@ -1706,12 +1706,14 @@ function MiningFunctions.startRareOreDetection()
                 
                 -- Check if rock is destroyed OR health is nil for too long (broken rock)
                 local rockDestroyed = (health ~= nil and health <= 0)
-                
+            
+
                 -- Check if we've been at this rock too long
                 local timeAtRock = MiningState.rockStartTime > 0 and (currentTime - MiningState.rockStartTime) or 0
-                local rockTimedOut = timeAtRock > MiningState.MAX_ROCK_TIME
-                
-                if rockDestroyed or rockTimedOut then
+                -- Don't timeout if we found a rare ore and we're maintaining it
+                local shouldTimeout = timeAtRock > MiningState.MAX_ROCK_TIME and not (MiningState.oreDetected and State.stopMiningOnDetection)
+
+                if rockDestroyed or shouldTimeout then
                     if rockTimedOut then
                         print(string.format("[RARE ORE] ⏰ Rock timed out after %.1f seconds, moving on...", timeAtRock))
                         MiningFunctions.markRockAsProblematic(target)
@@ -1766,6 +1768,43 @@ function MiningFunctions.startRareOreDetection()
                 
                 -- MAINTENANCE MODE: Rare ore found, preserve mode enabled
                 if State.stopMiningOnDetection and MiningState.oreDetected then
+                    if currentTime - MiningState.lastMaintenanceHit >= State.rockMaintenanceInterval then
+                        MiningState.lastMaintenanceHit = currentTime
+                        
+                        if MiningState.isAtRock then
+                            print("[RARE ORE] 🔨 Maintenance hit (Stop Mode)...")
+                            MiningFunctions.mineRock(target)
+                        end
+                    end
+                    local currentOre, oreModel = MiningFunctions.checkForOresInRock(target)
+                    local rareOreStillPresent = false
+                    
+                    if currentOre then
+                        for _, rareOre in ipairs(State.selectedRareOres) do
+                            if currentOre == rareOre or currentOre:find(rareOre) then
+                                rareOreStillPresent = true
+                                break
+                            end
+                        end
+                    end
+                    
+                    -- If rare ore is gone, move to next rock
+                    if not rareOreStillPresent then
+                        print("[RARE ORE] 💎 Rare ore collected/despawned! Moving to next rock...")
+                        MiningState.currentTarget = nil
+                        MiningState.oreDetected = false
+                        MiningState.shouldMineOut = false
+                        MiningState.notificationSentForRock = false
+                        MiningState.isCheckingOre = false
+                        MiningState.rockStartTime = 0
+                        State.initialRockHealth = nil
+                        MiningState.isAtRock = false
+                        MiningState.stuckCount = 0
+                        lastSearchTime = 0
+                        return
+                    end
+                    
+                    -- Rare ore still there, do maintenance hit
                     if currentTime - MiningState.lastMaintenanceHit >= State.rockMaintenanceInterval then
                         MiningState.lastMaintenanceHit = currentTime
                         
