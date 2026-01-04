@@ -82,7 +82,7 @@ local RockData = {
     ["Light Crystal"] = { Ores = {"Blue Crystal", "Crimson Crystal", "Green Crystal", "Magenta Crystal", "Orange Crystal", "Rainbow Crystal", "Arcane Crystal"}, Health = 5005, RequiredDamage = 78, LuckBoost = 5 }
 }
 
-local RockTypes = {"Rock", "Boulder", "Pebble", "Lucky Block", "Light Crystal", "Volcanic Rock", "Basalt Core", "Basalt Rock", "Basalt Vein", "Violet Crystal", "Earth Crystal", "Cyan Crystal", "Crimson Crystal", "Icy Pebble", "Icy Rock", "Icy Boulder", "Small Ice Crystal", "Medium Ice Crystal", "Large Ice Crystal", "Floating Crystal"}
+local RockTypes = {"Rock", "Boulder", "Pebble", "Lucky Block", "Light Crystal", "Volcanic Rock", "Basalt Core", "Basalt Rock", "Basalt Vein", "Violet Crystal", "Earth Crystal", "Cyan Crystal", "Crimson Crystal", "Icy Pebble", "Icy Rock", "Icy Boulder", "Small Ice Crystal", "Medium Ice Crystal", "Large Ice Crystal", "Floating Crystal", "Small Red Crystal", "Medium Red Crystal", "Small Red Crystal", "Heart Of The Island"}
 
 local RockLocations = {"All", "Island1CaveDeep", "Island1CaveMid", "Island1CaveStart", "Roof", "Island2CaveDanger1", "Island2CaveDanger2", "Island2CaveDanger3", "Island2CaveDanger4", "Island2CaveDangerClosed", "Island2CaveDeep", "Island2CaveLavaClosed", "Island2CaveMid", "Island2CaveStart", "Island2GoblinCave", "Island2VolcanicDepths", "Iceberg", "Island3CavePeakEnd", "Island3CavePeakLeft", "Island3CavePeakRight", "Island3CavePeakStart", "Island3RedCave", "Island3SpiderCaveMid", "Island3SpiderCaveMid0", "Island3SpiderCaveMid2", "Island3SpiderCaveStart", "Island3SpiderCaveStart0", "Island3SpiderCaveStart2"}
 
@@ -92,7 +92,6 @@ local GOBLIN_CAVE_BOUNDS = {
     Min = Vector3.new(40, 15, -410),
     Max = Vector3.new(260, 75, -20)
 }
-
 
 local State = {
     savedWalkSpeed = Constants.DEFAULT_WALKSPEED,
@@ -4009,4 +4008,3 @@ else
         VirtualUser:ClickButton2(Vector2.new())
     end)
 end
-
