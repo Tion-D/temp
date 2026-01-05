@@ -82,7 +82,7 @@ local RockData = {
     ["Light Crystal"] = { Ores = {"Blue Crystal", "Crimson Crystal", "Green Crystal", "Magenta Crystal", "Orange Crystal", "Rainbow Crystal", "Arcane Crystal"}, Health = 5005, RequiredDamage = 78, LuckBoost = 5 }
 }
 
-local RockTypes = {"Rock", "Boulder", "Pebble", "Lucky Block", "Light Crystal", "Volcanic Rock", "Basalt Core", "Basalt Rock", "Basalt Vein", "Violet Crystal", "Earth Crystal", "Cyan Crystal", "Crimson Crystal", "Icy Pebble", "Icy Rock", "Icy Boulder", "Small Ice Crystal", "Medium Ice Crystal", "Large Ice Crystal", "Floating Crystal", "Small Red Crystal", "Medium Red Crystal", "Small Red Crystal", "Heart Of The Island"}
+local RockTypes = {"Rock", "Boulder", "Pebble", "Lucky Block", "Light Crystal", "Volcanic Rock", "Basalt Core", "Basalt Rock", "Basalt Vein", "Violet Crystal", "Earth Crystal", "Cyan Crystal", "Crimson Crystal", "Icy Pebble", "Icy Rock", "Icy Boulder", "Small Ice Crystal", "Medium Ice Crystal", "Large Ice Crystal", "Floating Crystal", "Small Red Crystal", "Medium Red Crystal", "Large Red Crystal", "Heart Of The Island"}
 
 local RockLocations = {"All", "Island1CaveDeep", "Island1CaveMid", "Island1CaveStart", "Roof", "Island2CaveDanger1", "Island2CaveDanger2", "Island2CaveDanger3", "Island2CaveDanger4", "Island2CaveDangerClosed", "Island2CaveDeep", "Island2CaveLavaClosed", "Island2CaveMid", "Island2CaveStart", "Island2GoblinCave", "Island2VolcanicDepths", "Iceberg", "Island3CavePeakEnd", "Island3CavePeakLeft", "Island3CavePeakRight", "Island3CavePeakStart", "Island3RedCave", "Island3SpiderCaveMid", "Island3SpiderCaveMid0", "Island3SpiderCaveMid2", "Island3SpiderCaveStart", "Island3SpiderCaveStart0", "Island3SpiderCaveStart2"}
 
@@ -169,10 +169,14 @@ local RareOreData = {
     ["Etherealite"] = "https://static.wikitide.net/theforgewiki/2/23/Etherealite_Ore.png",
     ["Suryafal"] = "https://static.wikitide.net/theforgewiki/thumb/2/26/Suryafal_Ore.png/64px-Suryafal_Ore.png",
     ["Gargantuan"] = "https://static.wikitide.net/theforgewiki/thumb/3/34/Gargantuan_Ore.png/64px-Gargantuan_Ore.png",
-    ["Heavenite"] = "https://static.wikitide.net/theforgewiki/thumb/6/62/Heavenite.png/64px-Heavenite.png"
+    ["Heavenite"] = "https://static.wikitide.net/theforgewiki/thumb/6/62/Heavenite.png/64px-Heavenite.png",
+    ["Duranite"] = "",
+    ["Evil Eye"] = "",
+    ["Stolen Heart"] = "",
+    ["Heart of The Island"] = ""
 }
 
-local RareOreTypes = {"Fireite", "Magmaite", "Lightite", "Demonite", "Darkryte", "Arcane Crystal", "Voidstar", "Etherealite", "Suryafal", "Heavenite", "Gargantuan", "Iceite", "Snowite", "Velchire", "Sanctis"}
+local RareOreTypes = {"Lightite", "Demonite", "Darkryte", "Arcane Crystal", "Voidstar", "Etherealite", "Suryafal", "Heavenite", "Gargantuan", "Iceite", "Duranite", "Evil Eye", "Stolen Heart", "Heart of The Island"}
 local Connections = {}
 
 local Utils = {}
